@@ -35,6 +35,17 @@ public sealed class CommandLineTests
     }
 
     [Theory]
+    [InlineData("--install", (int)AppMode.Install)]
+    [InlineData("--uninstall", (int)AppMode.Uninstall)]
+    public void Parse_QuietMaintenanceMode_CapturesQuietValue(string argument, int expectedMode)
+    {
+        AppCommand result = CommandLine.Parse([argument, "--quiet"]);
+
+        Assert.Equal((AppMode)expectedMode, result.Mode);
+        Assert.Equal("quiet", result.Value);
+    }
+
+    [Theory]
     [InlineData("busy")]
     [InlineData("ready")]
     [InlineData("inactive")]

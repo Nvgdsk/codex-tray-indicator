@@ -30,8 +30,8 @@ internal static class CommandLine
             "--hook" => ParseHook(args),
             "--hook-test" => ParseHookTest(args),
             "--query-state" => ParseSingle(args, AppMode.QueryState),
-            "--install" => ParseSingle(args, AppMode.Install),
-            "--uninstall" => ParseSingle(args, AppMode.Uninstall),
+            "--install" => ParseMaintenance(args, AppMode.Install),
+            "--uninstall" => ParseMaintenance(args, AppMode.Uninstall),
             "--shutdown" => ParseSingle(args, AppMode.Shutdown),
             _ => throw new ArgumentException($"Unknown argument: {args[0]}", nameof(args)),
         };
@@ -72,5 +72,15 @@ internal static class CommandLine
         }
 
         return new AppCommand(mode, null, null);
+    }
+
+    private static AppCommand ParseMaintenance(IReadOnlyList<string> args, AppMode mode)
+    {
+        return args.Count switch
+        {
+            1 => new AppCommand(mode, null, null),
+            2 when args[1] == "--quiet" => new AppCommand(mode, "quiet", null),
+            _ => throw new ArgumentException($"{args[0]} accepts only the optional --quiet argument.", nameof(args)),
+        };
     }
 }

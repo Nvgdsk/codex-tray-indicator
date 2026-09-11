@@ -24,8 +24,14 @@ internal static class ApplicationHost
                         services.StandardInput,
                         services.StandardOutput,
                         cancellationToken).ConfigureAwait(false),
-                AppMode.Install => await InstallAsync(services, cancellationToken).ConfigureAwait(false),
-                AppMode.Uninstall => await UninstallAsync(services, cancellationToken).ConfigureAwait(false),
+                AppMode.Install => await InstallAsync(
+                    services,
+                    command.Value == "quiet",
+                    cancellationToken).ConfigureAwait(false),
+                AppMode.Uninstall => await UninstallAsync(
+                    services,
+                    command.Value == "quiet",
+                    cancellationToken).ConfigureAwait(false),
                 _ => 2,
             };
         }
@@ -46,13 +52,17 @@ internal static class ApplicationHost
         }
         catch (Exception exception)
         {
-            services.Messages.Show("Codex Tray Indicator", exception.Message, isError: true);
+            if (command.Value != "quiet")
+            {
+                services.Messages.Show("Codex Tray Indicator", exception.Message, isError: true);
+            }
             return 1;
         }
     }
 
     private static async Task<int> InstallAsync(
         AppServices services,
+        bool quiet,
         CancellationToken cancellationToken)
     {
         IntegrationResult result = await services.Installer.InstallAsync(
@@ -60,29 +70,39 @@ internal static class ApplicationHost
             cancellationToken).ConfigureAwait(false);
         if (!result.Success)
         {
-            services.Messages.Show("Codex Tray installation failed", result.Message, isError: true);
+            if (!quiet)
+            {
+                services.Messages.Show("Codex Tray installation failed", result.Message, isError: true);
+            }
             return 1;
         }
 
         string details = string.Join(
             " / ",
             new[] { result.Distribution, result.CodexVersion }.Where(value => !string.IsNullOrWhiteSpace(value)));
-        services.Messages.Show(
-            "Codex Tray installed",
-            $"{result.Message}{Environment.NewLine}{details}{Environment.NewLine}{Environment.NewLine}{TrustInstruction}",
-            isError: false);
+        if (!quiet)
+        {
+            services.Messages.Show(
+                "Codex Tray installed",
+                $"{result.Message}{Environment.NewLine}{details}{Environment.NewLine}{Environment.NewLine}{TrustInstruction}",
+                isError: false);
+        }
         return 0;
     }
 
     private static async Task<int> UninstallAsync(
         AppServices services,
+        bool quiet,
         CancellationToken cancellationToken)
     {
         IntegrationResult result = await services.Installer.UninstallAsync(cancellationToken)
             .ConfigureAwait(false);
         if (!result.Success)
         {
-            services.Messages.Show("Codex Tray removal failed", result.Message, isError: true);
+            if (!quiet)
+            {
+                services.Messages.Show("Codex Tray removal failed", result.Message, isError: true);
+            }
             return 1;
         }
 
@@ -99,10 +119,13 @@ internal static class ApplicationHost
             // Hook removal already succeeded; an absent or exiting tray is acceptable here.
         }
 
-        services.Messages.Show(
-            "Codex Tray removed",
-            $"{result.Message}{Environment.NewLine}{Environment.NewLine}Foreign hooks were preserved.",
-            isError: false);
+        if (!quiet)
+        {
+            services.Messages.Show(
+                "Codex Tray removed",
+                $"{result.Message}{Environment.NewLine}{Environment.NewLine}Foreign hooks were preserved.",
+                isError: false);
+        }
         return 0;
     }
 }

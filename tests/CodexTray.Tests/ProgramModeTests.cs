@@ -95,6 +95,22 @@ public sealed class ProgramModeTests
         Assert.Contains("no Codex", message.Text, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData((int)AppMode.Install)]
+    [InlineData((int)AppMode.Uninstall)]
+    public async Task QuietMaintenanceMode_SuppressesUserMessage(int modeValue)
+    {
+        TestServices fixture = TestServices.Create();
+
+        int result = await ApplicationHost.RunAsync(
+            new AppCommand((AppMode)modeValue, "quiet", null),
+            fixture.Services,
+            CancellationToken.None);
+
+        Assert.Equal(0, result);
+        Assert.Empty(fixture.Messages.Messages);
+    }
+
     [Fact]
     public async Task Uninstall_SuccessReturnsZeroAndReportsForeignHooksPreserved()
     {

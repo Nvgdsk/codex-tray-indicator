@@ -19,35 +19,50 @@ public sealed class SingleInstanceIntegrationTests
             "CodexTray.exe");
         Assert.True(File.Exists(executable), $"Missing test executable: {executable}");
 
-        using Process first = Start(executable);
+        Process? owner = null;
+        bool ownsTray = false;
         try
         {
-            await WaitForStateAsync(executable, "Inactive", TimeSpan.FromSeconds(5));
+            string? ownerState = await QueryStateAsync(executable);
+            if (ownerState is null)
+            {
+                owner = Start(executable);
+                ownsTray = true;
+                await WaitForStateAsync(executable, "Inactive", TimeSpan.FromSeconds(5));
+            }
 
             using Process second = Start(executable);
             using var secondTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
             await second.WaitForExitAsync(secondTimeout.Token);
 
             Assert.Equal(0, second.ExitCode);
-            Assert.False(first.HasExited);
-            Assert.Equal("Inactive", await QueryStateAsync(executable));
+            if (owner is not null)
+            {
+                Assert.False(owner.HasExited);
+            }
+            Assert.NotNull(await QueryStateAsync(executable));
         }
         finally
         {
-            using Process shutdown = Start(executable, "--shutdown", redirectOutput: true);
-            using var shutdownTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-            try
+            if (ownsTray && owner is not null)
             {
-                await shutdown.WaitForExitAsync(shutdownTimeout.Token);
-                await first.WaitForExitAsync(shutdownTimeout.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                if (!first.HasExited)
+                using Process shutdown = Start(executable, "--shutdown", redirectOutput: true);
+                using var shutdownTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                try
                 {
-                    first.Kill(entireProcessTree: true);
-                    await first.WaitForExitAsync();
+                    await shutdown.WaitForExitAsync(shutdownTimeout.Token);
+                    await owner.WaitForExitAsync(shutdownTimeout.Token);
                 }
+                catch (OperationCanceledException)
+                {
+                    if (!owner.HasExited)
+                    {
+                        owner.Kill(entireProcessTree: true);
+                        await owner.WaitForExitAsync();
+                    }
+                }
+
+                owner.Dispose();
             }
         }
     }
