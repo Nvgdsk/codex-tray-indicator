@@ -1,6 +1,15 @@
 namespace CodexTray;
 
-internal sealed class HookCommandRunner
+internal interface IHookCommandRunner
+{
+    Task<int> RunAsync(
+        AppCommand command,
+        Stream stdin,
+        TextWriter stdout,
+        CancellationToken cancellationToken);
+}
+
+internal sealed class HookCommandRunner : IHookCommandRunner
 {
     private readonly IIpcClient _client;
     private readonly TimeProvider _clock;
@@ -22,6 +31,7 @@ internal sealed class HookCommandRunner
             AppMode.Hook => await RunHook(command, stdin, cancellationToken).ConfigureAwait(false),
             AppMode.HookTest => await RunHookTest(command, cancellationToken).ConfigureAwait(false),
             AppMode.QueryState => await RunQuery(stdout, cancellationToken).ConfigureAwait(false),
+            AppMode.Shutdown => await RunShutdown(cancellationToken).ConfigureAwait(false),
             _ => throw new ArgumentException("The command is not an IPC client mode.", nameof(command)),
         };
     }
@@ -91,6 +101,15 @@ internal sealed class HookCommandRunner
 
         await stdout.WriteLineAsync(response.State.Value.ToString()).ConfigureAwait(false);
         return 0;
+    }
+
+    private async Task<int> RunShutdown(CancellationToken cancellationToken)
+    {
+        IpcResponse? response = await _client.SendAsync(
+            IpcMessage.Shutdown(),
+            expectResponse: true,
+            cancellationToken).ConfigureAwait(false);
+        return response?.Ok == true ? 0 : 2;
     }
 
     private static async Task<byte[]?> ReadBoundedAsync(

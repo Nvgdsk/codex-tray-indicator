@@ -169,6 +169,26 @@ public sealed class HookCommandRunnerTests
     }
 
     [Fact]
+    public async Task Shutdown_SendsShutdownRequestAndRequiresAcknowledgement()
+    {
+        var client = new RecordingIpcClient
+        {
+            Response = new IpcResponse(true, TrayState.Inactive, null),
+        };
+        var runner = Runner(client);
+
+        int exitCode = await runner.RunAsync(
+            new AppCommand(AppMode.Shutdown, null, null),
+            Stream.Null,
+            TextWriter.Null,
+            CancellationToken.None);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal(IpcMessageKind.Shutdown, Assert.Single(client.Messages).Kind);
+        Assert.True(client.ExpectResponse);
+    }
+
+    [Fact]
     public async Task Hook_WhenClientThrows_FailsOpen()
     {
         var client = new RecordingIpcClient { Exception = new IOException("pipe failed") };

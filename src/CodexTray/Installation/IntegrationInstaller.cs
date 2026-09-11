@@ -6,10 +6,17 @@ internal sealed record IntegrationResult(
     string? Distribution,
     string? CodexVersion);
 
+internal interface IIntegrationInstaller
+{
+    Task<IntegrationResult> InstallAsync(string exePath, CancellationToken cancellationToken);
+
+    Task<IntegrationResult> UninstallAsync(CancellationToken cancellationToken);
+}
+
 internal sealed class IntegrationInstaller(
     IWslDetector detector,
     IWslHookConfigStore configStore,
-    IUserSettings settings)
+    IUserSettings settings) : IIntegrationInstaller
 {
     public async Task<IntegrationResult> InstallAsync(
         string exePath,

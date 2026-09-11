@@ -15,6 +15,7 @@ public sealed class CommandLineTests
     [InlineData("--query-state", (int)AppMode.QueryState)]
     [InlineData("--install", (int)AppMode.Install)]
     [InlineData("--uninstall", (int)AppMode.Uninstall)]
+    [InlineData("--shutdown", (int)AppMode.Shutdown)]
     public void Parse_SingleModeArgument_SelectsRequestedMode(string argument, int expected)
     {
         AppCommand result = CommandLine.Parse([argument]);

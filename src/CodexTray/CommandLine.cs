@@ -8,6 +8,7 @@ internal enum AppMode
     QueryState,
     Install,
     Uninstall,
+    Shutdown,
 }
 
 internal sealed record AppCommand(AppMode Mode, string? Value, string? IntegrationId);
@@ -31,6 +32,7 @@ internal static class CommandLine
             "--query-state" => ParseSingle(args, AppMode.QueryState),
             "--install" => ParseSingle(args, AppMode.Install),
             "--uninstall" => ParseSingle(args, AppMode.Uninstall),
+            "--shutdown" => ParseSingle(args, AppMode.Shutdown),
             _ => throw new ArgumentException($"Unknown argument: {args[0]}", nameof(args)),
         };
     }
