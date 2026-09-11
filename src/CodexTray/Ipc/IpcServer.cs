@@ -11,6 +11,8 @@ internal sealed class IpcServer
     private readonly TimeSpan _ioTimeout;
     private readonly Action<Exception>? _protocolError;
 
+    public event Action<Exception>? ProtocolError;
+
     public IpcServer(
         string pipeName = AppConstants.PipeName,
         int maximumMessageBytes = AppConstants.MaxMessageBytes,
@@ -103,6 +105,7 @@ internal sealed class IpcServer
                 var protocolException = exception as InvalidDataException
                     ?? new InvalidDataException("Invalid IPC request.", exception);
                 _protocolError?.Invoke(protocolException);
+                ProtocolError?.Invoke(protocolException);
                 await TryWriteResponse(
                     pipe,
                     new IpcResponse(false, null, protocolException.Message),
