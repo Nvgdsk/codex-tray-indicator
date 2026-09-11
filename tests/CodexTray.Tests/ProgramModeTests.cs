@@ -110,6 +110,7 @@ public sealed class ProgramModeTests
         UserMessage message = Assert.Single(fixture.Messages.Messages);
         Assert.False(message.IsError);
         Assert.Contains("foreign hooks were preserved", message.Text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(fixture.HookRunner.Commands, command => command.Mode == AppMode.Shutdown);
     }
 
     [Fact]
@@ -167,6 +168,7 @@ public sealed class ProgramModeTests
         public Exception? Exception { get; set; }
         public Stream? Input { get; private set; }
         public TextWriter? Output { get; private set; }
+        public List<AppCommand> Commands { get; } = [];
 
         public Task<int> RunAsync(
             AppCommand command,
@@ -174,6 +176,7 @@ public sealed class ProgramModeTests
             TextWriter stdout,
             CancellationToken cancellationToken)
         {
+            Commands.Add(command);
             Input = stdin;
             Output = stdout;
             return Exception is null ? Task.FromResult(ExitCode) : Task.FromException<int>(Exception);

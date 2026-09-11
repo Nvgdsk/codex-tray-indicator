@@ -175,7 +175,7 @@ public sealed class IntegrationInstallerTests
         Assert.Equal("wsl.exe", runner.Requests[0].FileName);
         Assert.Equal("Ubuntu", runner.Requests[0].Arguments[1]);
         Assert.Equal("--exec", runner.Requests[0].Arguments[2]);
-        Assert.Contains("hooks.json", runner.Requests[0].Arguments[^1], StringComparison.Ordinal);
+        Assert.Contains("hooks.json", runner.Requests[0].Arguments[5], StringComparison.Ordinal);
     }
 
     [Theory]

@@ -86,6 +86,19 @@ internal static class ApplicationHost
             return 1;
         }
 
+        try
+        {
+            _ = await services.HookRunner.RunAsync(
+                new AppCommand(AppMode.Shutdown, null, null),
+                services.StandardInput,
+                services.StandardOutput,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Hook removal already succeeded; an absent or exiting tray is acceptable here.
+        }
+
         services.Messages.Show(
             "Codex Tray removed",
             $"{result.Message}{Environment.NewLine}{Environment.NewLine}Foreign hooks were preserved.",

@@ -1,5 +1,6 @@
 .tools/
 artifacts/
+dist/
 **/bin/
 **/obj/
 TestResults/
