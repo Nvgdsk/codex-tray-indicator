@@ -173,7 +173,32 @@ internal static class HookConfigMerger
         }
 
         return type.Equals("command", StringComparison.OrdinalIgnoreCase) &&
-            command.Contains(OwnedToken, StringComparison.Ordinal);
+            ContainsOwnedToken(command);
+    }
+
+    private static bool ContainsOwnedToken(string command)
+    {
+        int searchIndex = 0;
+        while (searchIndex < command.Length)
+        {
+            int tokenIndex = command.IndexOf(OwnedToken, searchIndex, StringComparison.Ordinal);
+            if (tokenIndex < 0)
+            {
+                return false;
+            }
+
+            int tokenEnd = tokenIndex + OwnedToken.Length;
+            bool hasLeftBoundary = tokenIndex == 0 || char.IsWhiteSpace(command[tokenIndex - 1]);
+            bool hasRightBoundary = tokenEnd == command.Length || char.IsWhiteSpace(command[tokenEnd]);
+            if (hasLeftBoundary && hasRightBoundary)
+            {
+                return true;
+            }
+
+            searchIndex = tokenIndex + 1;
+        }
+
+        return false;
     }
 
     private static string EscapePosixDoubleQuoted(string value)

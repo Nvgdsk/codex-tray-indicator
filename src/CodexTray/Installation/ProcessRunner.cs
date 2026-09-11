@@ -37,37 +37,50 @@ internal sealed class ProcessRunner : IProcessRunner
             throw new InvalidOperationException($"Unable to start {request.FileName}.");
         }
 
-        Task<string> standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        Task<string> standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-        if (request.StandardInput is not null)
-        {
-            await process.StandardInput.WriteAsync(request.StandardInput.AsMemory(), cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        process.StandardInput.Close();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(request.Timeout);
+        Task<string> standardOutput = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        Task<string> standardError = process.StandardError.ReadToEndAsync(timeout.Token);
 
         try
         {
+            if (request.StandardInput is not null)
+            {
+                await process.StandardInput.WriteAsync(request.StandardInput.AsMemory(), timeout.Token)
+                    .ConfigureAwait(false);
+            }
+
+            process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+
+            return new ProcessResult(
+                process.ExitCode,
+                await standardOutput.ConfigureAwait(false),
+                await standardError.ConfigureAwait(false));
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (
+            exception is OperationCanceledException or IOException &&
+            timeout.IsCancellationRequested &&
+            !cancellationToken.IsCancellationRequested)
         {
             KillIfRunning(process);
-            throw new TimeoutException($"{request.FileName} exceeded {request.Timeout}.");
+            throw new TimeoutException($"{request.FileName} exceeded {request.Timeout}.", exception);
         }
         catch (OperationCanceledException)
         {
             KillIfRunning(process);
             throw;
         }
-
-        return new ProcessResult(
-            process.ExitCode,
-            await standardOutput.ConfigureAwait(false),
-            await standardError.ConfigureAwait(false));
+        finally
+        {
+            try
+            {
+                process.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+            }
+        }
     }
 
     private static void KillIfRunning(Process process)

@@ -157,6 +157,21 @@ public sealed class HookConfigMergerTests
         Assert.Equal(0, HookConfigMerger.CountOwnedHandlers(json));
     }
 
+    [Fact]
+    public void Uninstall_DoesNotRemoveIntegrationIdWithLongerSuffix()
+    {
+        const string json = """
+            { "hooks": { "Stop": [{ "hooks": [
+              { "type": "command", "command": "foreign --integration-id codex-tray-indicator-v10" }
+            ] }] } }
+            """;
+
+        string result = HookConfigMerger.Uninstall(json);
+
+        Assert.Contains("codex-tray-indicator-v10", result, StringComparison.Ordinal);
+        Assert.Equal(0, HookConfigMerger.CountOwnedHandlers(result));
+    }
+
     private static JsonObject ParseObject(string json)
     {
         return Assert.IsType<JsonObject>(JsonNode.Parse(json));

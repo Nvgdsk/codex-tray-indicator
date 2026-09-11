@@ -17,14 +17,10 @@ SetupLogging=yes
 WizardStyle=modern
 
 [Files]
-Source: "..\dist\CodexTray.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\CodexTray.exe"; DestDir: "{app}"; Flags: ignoreversion; AfterInstall: InstallIntegration
 
 [Run]
-Filename: "{app}\CodexTray.exe"; Parameters: "{code:GetMaintenanceParameters|--install}"; Flags: waituntilterminated
 Filename: "{app}\CodexTray.exe"; Description: "Launch Codex Tray Indicator"; Flags: nowait postinstall skipifsilent
-
-[UninstallRun]
-Filename: "{app}\CodexTray.exe"; Parameters: "{code:GetMaintenanceParameters|--uninstall}"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveCodexTrayIntegration"
 
 [Code]
 function GetMaintenanceParameters(Value: String): String;
@@ -47,14 +43,36 @@ begin
   end;
 end;
 
+procedure InstallIntegration();
+var
+  ResultCode: Integer;
+begin
+  if not Exec(ExpandConstant('{app}\CodexTray.exe'),
+    GetMaintenanceParameters('--install'), '', SW_SHOWNORMAL,
+    ewWaitUntilTerminated, ResultCode) then
+    RaiseException('Unable to start Codex Tray integration setup.')
+  else if ResultCode <> 0 then
+    RaiseException(Format('Codex Tray integration setup failed with exit code %d.', [ResultCode]));
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   StopInstalledTray();
   Result := '';
 end;
 
-function InitializeUninstall(): Boolean;
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
 begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+
   StopInstalledTray();
-  Result := True;
+  if not Exec(ExpandConstant('{app}\CodexTray.exe'),
+    GetMaintenanceParameters('--uninstall'), '', SW_SHOWNORMAL,
+    ewWaitUntilTerminated, ResultCode) then
+    RaiseException('Unable to start Codex Tray integration removal.')
+  else if ResultCode <> 0 then
+    RaiseException(Format('Codex Tray integration removal failed with exit code %d.', [ResultCode]));
 end;

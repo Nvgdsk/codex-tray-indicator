@@ -11,11 +11,39 @@ public sealed class InstallerDefinitionTests
             "CodexTray.iss"));
 
         Assert.Contains("function PrepareToInstall", script, StringComparison.Ordinal);
-        Assert.Contains("function InitializeUninstall", script, StringComparison.Ordinal);
+        Assert.Contains("procedure CurUninstallStepChanged", script, StringComparison.Ordinal);
         Assert.Contains("--shutdown", script, StringComparison.Ordinal);
         Assert.True(
             script.Split("StopInstalledTray();", StringSplitOptions.None).Length - 1 >= 2,
-            "Both install and uninstall preparation must stop the tray.");
+            "Both replacement and confirmed uninstall must stop the tray.");
+    }
+
+    [Fact]
+    public void Installer_AbortsWhenInstallOrUninstallMaintenanceFails()
+    {
+        string script = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "installer",
+            "CodexTray.iss"));
+
+        Assert.Contains("ResultCode <> 0", script, StringComparison.Ordinal);
+        Assert.True(
+            script.Split("RaiseException", StringSplitOptions.None).Length - 1 >= 2,
+            "Install and uninstall maintenance failures must abort their operation.");
+        Assert.DoesNotContain("[UninstallRun]", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Uninstaller_DoesNotRemoveIntegrationBeforeUserConfirms()
+    {
+        string script = File.ReadAllText(Path.Combine(
+            FindRepositoryRoot(),
+            "installer",
+            "CodexTray.iss"));
+
+        Assert.Contains("procedure CurUninstallStepChanged", script, StringComparison.Ordinal);
+        Assert.Contains("CurUninstallStep <> usUninstall", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("function InitializeUninstall", script, StringComparison.Ordinal);
     }
 
     private static string FindRepositoryRoot()
