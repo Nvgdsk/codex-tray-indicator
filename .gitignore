@@ -1,0 +1,7 @@
+.tools/
+artifacts/
+**/bin/
+**/obj/
+TestResults/
+*.user
+*.suo
