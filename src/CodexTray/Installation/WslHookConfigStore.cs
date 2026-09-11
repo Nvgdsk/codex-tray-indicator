@@ -40,7 +40,7 @@ internal sealed class WslHookConfigStore(IProcessRunner processRunner) : IWslHoo
         ProcessResult result = await processRunner.RunAsync(
             new ProcessRequest(
                 "wsl.exe",
-                ["-d", distribution, "--", "sh", "-lc", ReadScript],
+                ["-d", distribution, "--exec", "sh", "-lc", ReadScript],
                 null,
                 CommandTimeout),
             cancellationToken).ConfigureAwait(false);
@@ -74,7 +74,7 @@ internal sealed class WslHookConfigStore(IProcessRunner processRunner) : IWslHoo
                 [
                     "-d",
                     distribution,
-                    "--",
+                    "--exec",
                     "sh",
                     "-lc",
                     WriteScript,

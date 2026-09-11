@@ -74,6 +74,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateVisual(_stateStore.Current);
 
         _server.ProtocolError += ServerOnProtocolError;
+        _server.ResponseSent += ServerOnResponseSent;
         _ = ObserveServerAsync();
     }
 
@@ -117,7 +118,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
                     return Task.FromResult(new IpcResponse(true, _stateStore.Current, null));
 
                 case IpcMessageKind.Shutdown:
-                    _uiContext.Post(_ => ExitThread(), null);
                     return Task.FromResult(new IpcResponse(true, _stateStore.Current, null));
 
                 default:
@@ -136,6 +136,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         StateTransition transition = _stateStore.SetError();
         PostTransition(transition, cause: null);
+    }
+
+    private void ServerOnResponseSent(IpcMessage message)
+    {
+        if (message.Kind == IpcMessageKind.Shutdown)
+        {
+            _uiContext.Post(_ => ExitThread(), null);
+        }
     }
 
     private void PostTransition(StateTransition transition, CodexHookEventName? cause)
@@ -229,6 +237,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _disposed = true;
         _server.ProtocolError -= ServerOnProtocolError;
+        _server.ResponseSent -= ServerOnResponseSent;
         _serverCancellation.Cancel();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();

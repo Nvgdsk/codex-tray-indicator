@@ -174,6 +174,7 @@ public sealed class IntegrationInstallerTests
         Assert.Equal("{}", result);
         Assert.Equal("wsl.exe", runner.Requests[0].FileName);
         Assert.Equal("Ubuntu", runner.Requests[0].Arguments[1]);
+        Assert.Equal("--exec", runner.Requests[0].Arguments[2]);
         Assert.Contains("hooks.json", runner.Requests[0].Arguments[^1], StringComparison.Ordinal);
     }
 
@@ -189,6 +190,7 @@ public sealed class IntegrationInstallerTests
 
         ProcessRequest request = Assert.Single(runner.Requests);
         Assert.Equal("{\"ok\":true}\n", request.StandardInput);
+        Assert.Equal("--exec", request.Arguments[2]);
         Assert.Equal("sh", request.Arguments[3]);
         Assert.Equal(flag, request.Arguments[^1]);
         Assert.Contains("mktemp", request.Arguments[5], StringComparison.Ordinal);

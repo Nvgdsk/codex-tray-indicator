@@ -48,7 +48,7 @@ internal sealed class WslDetector(IProcessRunner processRunner) : IWslDetector
                     [
                         "-d",
                         distribution,
-                        "--",
+                        "--exec",
                         "sh",
                         "-lc",
                         "command -v codex 2>/dev/null && codex --version",
@@ -83,7 +83,7 @@ internal sealed class WslDetector(IProcessRunner processRunner) : IWslDetector
         ProcessResult result = await processRunner.RunAsync(
             new ProcessRequest(
                 "wsl.exe",
-                ["-d", distribution, "--", "wslpath", "-a", "-u", "--", windowsPath],
+                ["-d", distribution, "--exec", "wslpath", "-a", "-u", "--", windowsPath],
                 null,
                 CommandTimeout),
             cancellationToken).ConfigureAwait(false);

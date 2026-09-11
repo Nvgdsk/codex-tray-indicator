@@ -13,6 +13,8 @@ internal sealed class IpcServer
 
     public event Action<Exception>? ProtocolError;
 
+    public event Action<IpcMessage>? ResponseSent;
+
     public IpcServer(
         string pipeName = AppConstants.PipeName,
         int maximumMessageBytes = AppConstants.MaxMessageBytes,
@@ -95,6 +97,7 @@ internal sealed class IpcServer
                 message.Validate();
                 IpcResponse response = await handler(message, ioCancellation.Token).ConfigureAwait(false);
                 await TryWriteResponse(pipe, response, ioCancellation.Token).ConfigureAwait(false);
+                ResponseSent?.Invoke(message);
             }
             catch (OperationCanceledException) when (serverCancellation.IsCancellationRequested)
             {

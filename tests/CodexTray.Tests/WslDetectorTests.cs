@@ -91,7 +91,7 @@ public sealed class WslDetectorTests
 
         Assert.Equal("/mnt/c/Users/test-user/Documents/Codex Tray/CodexTray.exe", result);
         Assert.Equal(
-            ["-d", "Ubuntu 24.04", "--", "wslpath", "-a", "-u", "--", windowsPath],
+            ["-d", "Ubuntu 24.04", "--exec", "wslpath", "-a", "-u", "--", windowsPath],
             runner.Requests[0].Arguments);
     }
 
