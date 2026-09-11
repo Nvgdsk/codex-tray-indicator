@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace CodexTray;
 
 internal interface IWslHookConfigStore
@@ -11,12 +13,14 @@ internal interface IWslHookConfigStore
         CancellationToken cancellationToken);
 }
 
-internal sealed class WslHookConfigStore(IProcessRunner processRunner) : IWslHookConfigStore
+internal sealed partial class WslHookConfigStore : IWslHookConfigStore
 {
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromSeconds(15);
 
-    private const string ReadScript =
-        "if [ -f \"$HOME/.codex/hooks.json\" ]; then cat \"$HOME/.codex/hooks.json\"; else exit 3; fi";
+    private const string ReadScript = """
+        dir="${1:-$HOME/.codex}"
+        if [ -f "$dir/hooks.json" ]; then cat "$dir/hooks.json"; else exit 3; fi
+        """;
 
     private const string WriteScript = """
         set -eu
@@ -34,13 +38,43 @@ internal sealed class WslHookConfigStore(IProcessRunner processRunner) : IWslHoo
         trap - EXIT HUP INT TERM
         """;
 
+    private readonly IProcessRunner _processRunner;
+    private readonly string? _configDirectory;
+
+    public WslHookConfigStore(IProcessRunner processRunner)
+        : this(processRunner, configDirectory: null)
+    {
+    }
+
+    internal WslHookConfigStore(IProcessRunner processRunner, string? configDirectory)
+    {
+        _processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
+        if (configDirectory is not null && !SafeTestDirectory().IsMatch(configDirectory))
+        {
+            throw new ArgumentException(
+                "A test config directory must match /tmp/codex-tray-tests-<32 lowercase hex>.",
+                nameof(configDirectory));
+        }
+
+        _configDirectory = configDirectory;
+    }
+
     public async Task<string> ReadAsync(string distribution, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(distribution);
-        ProcessResult result = await processRunner.RunAsync(
+        var arguments = new List<string>
+        {
+            "-d", distribution, "--exec", "sh", "-lc", ReadScript, "codex-tray",
+        };
+        if (_configDirectory is not null)
+        {
+            arguments.Add(_configDirectory);
+        }
+
+        ProcessResult result = await _processRunner.RunAsync(
             new ProcessRequest(
                 "wsl.exe",
-                ["-d", distribution, "--exec", "sh", "-lc", ReadScript],
+                arguments,
                 null,
                 CommandTimeout),
             cancellationToken).ConfigureAwait(false);
@@ -68,19 +102,26 @@ internal sealed class WslHookConfigStore(IProcessRunner processRunner) : IWslHoo
         ArgumentException.ThrowIfNullOrWhiteSpace(distribution);
         ArgumentNullException.ThrowIfNull(json);
 
-        ProcessResult result = await processRunner.RunAsync(
+        var arguments = new List<string>
+        {
+            "-d",
+            distribution,
+            "--exec",
+            "sh",
+            "-lc",
+            WriteScript,
+            "codex-tray",
+            createBackup ? "1" : "0",
+        };
+        if (_configDirectory is not null)
+        {
+            arguments.Add(_configDirectory);
+        }
+
+        ProcessResult result = await _processRunner.RunAsync(
             new ProcessRequest(
                 "wsl.exe",
-                [
-                    "-d",
-                    distribution,
-                    "--exec",
-                    "sh",
-                    "-lc",
-                    WriteScript,
-                    "codex-tray",
-                    createBackup ? "1" : "0",
-                ],
+                arguments,
                 json,
                 CommandTimeout),
             cancellationToken).ConfigureAwait(false);
@@ -98,4 +139,7 @@ internal sealed class WslHookConfigStore(IProcessRunner processRunner) : IWslHoo
             : result.StandardError;
         return string.IsNullOrWhiteSpace(message) ? $"exit code {result.ExitCode}" : message.Trim();
     }
+
+    [GeneratedRegex(@"^/tmp/codex-tray-tests-[0-9a-f]{32}$", RegexOptions.CultureInvariant)]
+    private static partial Regex SafeTestDirectory();
 }
