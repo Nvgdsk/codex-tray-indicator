@@ -56,19 +56,19 @@
 - Consumes: the present uncommitted v1.3.0 working-tree changes and existing .NET 8 Release test environment.
 - Produces: one isolated source/test commit for the already-implemented USB feature, with generated release assets still uncommitted.
 
-- [ ] **Step 1: Re-review the exact baseline diff and tracked-file boundary**
+- [x] **Step 1: Re-review the exact baseline diff and tracked-file boundary**
 
   Run: `git diff --check; git diff --stat; git status --short; git ls-files dist`
 
   Expected: no whitespace errors; source/test/installer/README and three `dist` files appear modified; the three `dist` paths are currently tracked.
 
-- [ ] **Step 2: Re-run the existing Release baseline**
+- [x] **Step 2: Re-run the existing Release baseline**
 
   Run: `& .\.tools\dotnet\dotnet.exe test .\CodexTray.sln --configuration Release --no-restore`
 
   Expected: exit 0; 177 passed and 3 explicitly skipped USB hardware tests.
 
-- [ ] **Step 3: Stage only the reviewed USB baseline**
+- [x] **Step 3: Stage only the reviewed USB baseline**
 
   Run: `git add README.md installer/CodexTray.iss src/CodexTray/CodexTray.csproj src/CodexTray/Installation/IUserSettings.cs src/CodexTray/Installation/RegistryUserSettings.cs src/CodexTray/UI/TrayApplicationContext.cs src/CodexTray/UI/TrayIconFactory.cs src/CodexTray/UsbScreen scripts/test-usb-screen.ps1 tests/CodexTray.Tests/IntegrationInstallerTests.cs tests/CodexTray.Tests/UsbMascotTests.cs tests/CodexTray.Tests/UsbScreenAnimationTests.cs tests/CodexTray.Tests/UsbScreenControllerTests.cs tests/CodexTray.Tests/UsbScreenHardwareTests.cs tests/CodexTray.Tests/UsbScreenTests.cs`
 
@@ -76,7 +76,7 @@
 
   Expected: only the listed source, installer, documentation, script, and test files are staged; all three `dist` files remain unstaged.
 
-- [ ] **Step 4: Commit the preserved baseline**
+- [x] **Step 4: Commit the preserved baseline**
 
   Run: `git commit -m "feat: add optional USB status display"`
 
