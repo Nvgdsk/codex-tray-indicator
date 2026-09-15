@@ -162,7 +162,7 @@
 - Consumes: .NET 10 SDK 10.0.401, NuGet package versions approved in the spec, and the existing test behavior.
 - Produces: `net10.0-windows` application/tests, xUnit.net v3 discovery, deterministic build defaults, and locked NuGet restores.
 
-- [ ] **Step 1: Extend the repository-contract test with failing toolchain assertions**
+- [x] **Step 1: Extend the repository-contract test with failing toolchain assertions**
 
   Assert exact SDK `10.0.401`, `rollForward: latestPatch`, `allowPrerelease: false`, both target frameworks `net10.0-windows`, the approved package versions, lock-file presence, and absence of `Invoke-WebRequest`/`dotnet-install.ps1` from the bootstrap script.
 
@@ -170,27 +170,27 @@
 
   Expected: nonzero exit listing the .NET 8 target, old packages, missing lock files, and unpinned bootstrap download.
 
-- [ ] **Step 2: Pin the SDK and compiler/build defaults**
+- [x] **Step 2: Pin the SDK and compiler/build defaults**
 
   Add `global.json` with SDK version `10.0.401`, `rollForward` set to `latestPatch`, and previews disabled.
 
   Add `Directory.Build.props` with `LangVersion` `14.0`, deterministic builds, nullable analysis, code-style enforcement, `AnalysisLevel` `latest-recommended`, warnings as errors, NuGet lock generation, and `ContinuousIntegrationBuild=true` only when `CI=true`.
 
-- [ ] **Step 3: Update framework and package references**
+- [x] **Step 3: Update framework and package references**
 
   Set both projects to `net10.0-windows`. Set `System.IO.Ports` to `10.0.12`. Replace xUnit v2 with `xunit.v3` `4.0.0`, `xunit.runner.visualstudio` `4.0.0`, `xunit.analyzers` `2.1.0`, `Microsoft.NET.Test.Sdk` `18.10.0`, and `coverlet.collector` `10.0.1`. Mark the analyzer, runner, and collector references `PrivateAssets=all` and set their `IncludeAssets` to `runtime; build; native; contentfiles; analyzers; buildtransitive`.
 
-- [ ] **Step 4: Replace the unpinned bootstrap path**
+- [x] **Step 4: Replace the unpinned bootstrap path**
 
   Make `scripts/bootstrap-build-tools.ps1` first discover and verify `dotnet.exe` version `10.0.401` and Inno Setup `7.1.0`. If missing, it may invoke only exact `winget` package IDs and versions: `Microsoft.DotNet.SDK.10` version `10.0.401` and `JRSoftware.InnoSetup.7` version `7.1.0`, with silent/noninteractive agreement flags. It must re-discover and re-verify both tools after installation and must never download or execute a remote script directly.
 
-- [ ] **Step 5: Install missing build tools only after a separate command approval**
+- [x] **Step 5: Install missing build tools only after a separate command approval**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap-build-tools.ps1`
 
   Expected: exact .NET and Inno versions are reported. If installation is required, stop first and obtain command/network/system-change approval.
 
-- [ ] **Step 6: Generate and verify NuGet lock files**
+- [x] **Step 6: Generate and verify NuGet lock files**
 
   Run: `dotnet restore .\CodexTray.sln --use-lock-file --force-evaluate`
 
@@ -198,13 +198,13 @@
 
   Expected: both commands exit 0; exactly one `packages.lock.json` exists beside each project and the locked restore makes no diff.
 
-- [ ] **Step 7: Run the migrated tests and fix only migration regressions**
+- [x] **Step 7: Run the migrated tests and fix only migration regressions**
 
   Run: `dotnet test .\CodexTray.sln --configuration Release --no-restore`
 
   Expected initially: any xUnit v3/compiler incompatibility fails visibly. Apply only compatibility changes required to retain existing semantics, then rerun until 177 tests pass and the same 3 hardware tests skip.
 
-- [ ] **Step 8: Verify format, analyzers, and contract**
+- [x] **Step 8: Verify format, analyzers, and contract**
 
   Run: `dotnet format .\CodexTray.sln --verify-no-changes --no-restore`
 
@@ -214,7 +214,7 @@
 
   Expected: all commands exit 0 with no warnings or file changes.
 
-- [ ] **Step 9: Commit the toolchain migration**
+- [x] **Step 9: Commit the toolchain migration**
 
   Run: `git add global.json Directory.Build.props src/CodexTray/CodexTray.csproj src/CodexTray/packages.lock.json tests/CodexTray.Tests/CodexTray.Tests.csproj tests/CodexTray.Tests/packages.lock.json tests/CodexTray.Tests scripts/bootstrap-build-tools.ps1 scripts/test-repository-contract.ps1; git diff --cached --check; git commit -m "build: migrate to locked .NET 10 toolchain"`
 
