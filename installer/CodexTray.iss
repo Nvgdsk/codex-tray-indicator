@@ -1,7 +1,11 @@
+#ifndef MyAppVersion
+  #error "MyAppVersion must be defined by the release build."
+#endif
+
 [Setup]
 AppId={{A73C2E3A-30CB-4D49-BED3-7B738890A1E2}
 AppName=Codex Tray Indicator
-AppVersion=1.3.0
+AppVersion={#MyAppVersion}
 DefaultDirName={localappdata}\Programs\CodexTray
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
