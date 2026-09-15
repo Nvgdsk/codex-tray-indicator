@@ -6,6 +6,8 @@ internal interface IUserSettings : IDisposable
 
     string? WslDistribution { get; set; }
 
+    UsbScreenOptions UsbScreen { get; set; }
+
     bool StartupEnabled { get; }
 
     void SetStartup(string exePath);

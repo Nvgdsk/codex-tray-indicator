@@ -36,7 +36,7 @@ internal static class TrayIconFactory
         }
     }
 
-    private static Color ColorFor(TrayState state) => state switch
+    internal static Color ColorFor(TrayState state) => state switch
     {
         TrayState.Ready => Color.FromArgb(0x22, 0xC5, 0x5E),
         TrayState.Busy => Color.FromArgb(0xEA, 0xB3, 0x08),

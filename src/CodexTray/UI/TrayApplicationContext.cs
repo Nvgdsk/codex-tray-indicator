@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.IO;
+using System.IO.Ports;
 using System.Windows.Forms;
 
 namespace CodexTray;
@@ -18,6 +19,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _startupItem;
     private readonly ToolStripMenuItem _notificationsItem;
+    private readonly ToolStripMenuItem _usbStatusItem;
+    private readonly UsbScreenController _usbScreen;
+    private UsbScreenOptions _usbScreenOptions;
     private bool _disposed;
 
     public TrayApplicationContext(
@@ -30,11 +34,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _server = server;
         _settings = settings;
         _mutex = mutex;
+        _usbScreenOptions = settings.UsbScreen;
         _uiContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         _icons = Enum.GetValues<TrayState>().ToDictionary(state => state, TrayIconFactory.Create);
 
         var titleItem = new ToolStripMenuItem("Codex Tray Indicator") { Enabled = false };
         _statusItem = new ToolStripMenuItem { Enabled = false };
+        _usbStatusItem = new ToolStripMenuItem { Enabled = false };
         _startupItem = new ToolStripMenuItem("Start with Windows")
         {
             CheckOnClick = true,
@@ -57,9 +63,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         [
             titleItem,
             _statusItem,
+            _usbStatusItem,
             new ToolStripSeparator(),
             _startupItem,
             _notificationsItem,
+            CreateUsbScreenMenu(),
             testItem,
             new ToolStripSeparator(),
             exitItem,
@@ -71,7 +79,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Icon = _icons[_stateStore.Current],
             Visible = true,
         };
+        _usbScreen = new UsbScreenController(new UsbScreenConnector(), _usbScreenOptions, _stateStore.Current);
         UpdateVisual(_stateStore.Current);
+        _usbStatusItem.Text = _usbScreen.Status;
+        _usbScreen.StatusChanged += UsbScreenOnStatusChanged;
 
         _server.ProtocolError += ServerOnProtocolError;
         _server.ResponseSent += ServerOnResponseSent;
@@ -186,6 +197,82 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notifyIcon.Icon = _icons[state];
         _notifyIcon.Text = $"Codex: {label}";
         _statusItem.Text = $"Status: {label}";
+        _usbScreen.SetState(state);
+    }
+
+    private ToolStripMenuItem CreateUsbScreenMenu()
+    {
+        var screenMenu = new ToolStripMenuItem("USB screen (Turing 3.5\")");
+        screenMenu.DropDownOpening += (_, _) =>
+        {
+            foreach (ToolStripItem item in screenMenu.DropDownItems.Cast<ToolStripItem>().ToArray()) item.Dispose();
+            screenMenu.DropDownItems.Clear();
+            var auto = new ToolStripMenuItem("Automatic") { Checked = _usbScreenOptions.Port == "AUTO" };
+            auto.Click += (_, _) => ConfigureUsbScreen(_usbScreenOptions with { Port = "AUTO" });
+            var off = new ToolStripMenuItem("Off") { Checked = !_usbScreenOptions.Enabled };
+            off.Click += (_, _) => ConfigureUsbScreen(_usbScreenOptions with { Port = "OFF" });
+            screenMenu.DropDownItems.AddRange([auto, off, new ToolStripSeparator()]);
+            try
+            {
+                string[] ports = SerialPort.GetPortNames();
+                if (_usbScreenOptions.Port is not "AUTO" and not "OFF")
+                    ports = ports.Append(_usbScreenOptions.Port).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                foreach (string port in ports.OrderBy(port => port, StringComparer.OrdinalIgnoreCase))
+                {
+                    var item = new ToolStripMenuItem(port) { Checked = _usbScreenOptions.Port == port };
+                    item.Click += (_, _) => ConfigureUsbScreen(_usbScreenOptions with { Port = port });
+                    screenMenu.DropDownItems.Add(item);
+                }
+            }
+            catch
+            {
+                screenMenu.DropDownItems.Add(new ToolStripMenuItem("COM ports unavailable") { Enabled = false });
+            }
+            var orientationMenu = new ToolStripMenuItem("Orientation");
+            foreach (ScreenOrientation orientation in Enum.GetValues<ScreenOrientation>())
+            {
+                string label = orientation switch
+                {
+                    ScreenOrientation.Portrait => "Portrait (320 × 480)",
+                    ScreenOrientation.ReversePortrait => "Portrait upside down",
+                    ScreenOrientation.Landscape => "Landscape (480 × 320)",
+                    _ => "Landscape upside down",
+                };
+                var item = new ToolStripMenuItem(label) { Checked = _usbScreenOptions.Orientation == orientation };
+                item.Click += (_, _) => ConfigureUsbScreen(_usbScreenOptions with { Orientation = orientation });
+                orientationMenu.DropDownItems.Add(item);
+            }
+            var reconnect = new ToolStripMenuItem("Reconnect screen") { Enabled = _usbScreenOptions.Enabled };
+            reconnect.Click += (_, _) => _usbScreen.Reconnect();
+            var animation = new ToolStripMenuItem("Pixel shift animation") { Checked = _usbScreenOptions.AnimationEnabled };
+            animation.Click += (_, _) => ConfigureUsbScreen(_usbScreenOptions with { AnimationEnabled = !_usbScreenOptions.AnimationEnabled });
+            var mascot = new ToolStripMenuItem("Animated character") { Checked = _usbScreenOptions.MascotEnabled };
+            mascot.Click += (_, _) => ConfigureUsbScreen(_usbScreenOptions with { MascotEnabled = !_usbScreenOptions.MascotEnabled });
+            screenMenu.DropDownItems.AddRange([new ToolStripSeparator(), orientationMenu, animation, mascot, reconnect]);
+        };
+        return screenMenu;
+    }
+
+    private void ConfigureUsbScreen(UsbScreenOptions options)
+    {
+        try
+        {
+            _settings.UsbScreen = options;
+            _usbScreenOptions = options;
+            _usbScreen.Configure(options);
+        }
+        catch (Exception exception)
+        {
+            _usbStatusItem.Text = $"USB screen: Cannot save settings — {exception.Message}";
+        }
+    }
+
+    private void UsbScreenOnStatusChanged(string status)
+    {
+        _uiContext.Post(_ =>
+        {
+            if (!_disposed) _usbStatusItem.Text = status;
+        }, null);
     }
 
     private void StartupItemOnClick(object? sender, EventArgs eventArgs)
@@ -223,6 +310,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void TestItemOnClick(object? sender, EventArgs eventArgs)
     {
+        _usbScreen.Reconnect();
         StateTransition transition = _stateStore.SetSynthetic(TrayState.Ready);
         PostTransition(transition, cause: null);
     }
@@ -239,6 +327,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _server.ProtocolError -= ServerOnProtocolError;
         _server.ResponseSent -= ServerOnResponseSent;
         _serverCancellation.Cancel();
+        _usbScreen.StatusChanged -= UsbScreenOnStatusChanged;
+        _usbScreen.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();
         _menu.Dispose();

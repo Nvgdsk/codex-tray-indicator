@@ -285,6 +285,7 @@ public sealed class IntegrationInstallerTests
         private string? _wslDistribution;
 
         public bool NotificationsEnabled { get; set; } = true;
+        public UsbScreenOptions UsbScreen { get; set; } = new();
         public string? StartupPath { get; set; }
 
         public string? WslDistribution
