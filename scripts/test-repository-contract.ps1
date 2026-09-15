@@ -18,6 +18,22 @@ function Assert-RepositoryContract {
     }
 }
 
+function Get-PackageVersion {
+    param(
+        [Parameter(Mandatory)][xml]$Project,
+        [Parameter(Mandatory)][string]$PackageName
+    )
+
+    $reference = @($Project.SelectNodes('//PackageReference')) |
+        Where-Object { $_.Include -eq $PackageName } |
+        Select-Object -First 1
+    if ($null -eq $reference) {
+        return $null
+    }
+
+    return [string]$reference.Version
+}
+
 Push-Location $repositoryRoot
 try {
     foreach ($requiredFile in @('LICENSE', '.gitattributes', '.editorconfig')) {
@@ -76,6 +92,71 @@ try {
             -Condition ($licenseText -match 'THE SOFTWARE IS PROVIDED "AS IS"') `
             -Message 'LICENSE does not contain the MIT warranty disclaimer.'
     }
+
+    if (Test-Path -LiteralPath 'global.json' -PathType Leaf) {
+        $globalJson = Get-Content -LiteralPath 'global.json' -Raw | ConvertFrom-Json
+        Assert-RepositoryContract `
+            -Condition ($globalJson.sdk.version -eq '10.0.401') `
+            -Message 'global.json must pin .NET SDK 10.0.401.'
+        Assert-RepositoryContract `
+            -Condition ($globalJson.sdk.rollForward -eq 'latestPatch') `
+            -Message 'global.json must use rollForward latestPatch.'
+        Assert-RepositoryContract `
+            -Condition ($globalJson.sdk.allowPrerelease -eq $false) `
+            -Message 'global.json must disable preview SDKs.'
+        Assert-RepositoryContract `
+            -Condition ($globalJson.test.runner -eq 'Microsoft.Testing.Platform') `
+            -Message 'global.json must select Microsoft.Testing.Platform for .NET 10 tests.'
+    }
+    else {
+        $failures.Add('Required toolchain file is missing: global.json')
+    }
+
+    $appProjectPath = 'src/CodexTray/CodexTray.csproj'
+    $testProjectPath = 'tests/CodexTray.Tests/CodexTray.Tests.csproj'
+    [xml]$appProject = Get-Content -LiteralPath $appProjectPath -Raw
+    [xml]$testProject = Get-Content -LiteralPath $testProjectPath -Raw
+
+    Assert-RepositoryContract `
+        -Condition ([string]$appProject.Project.PropertyGroup.TargetFramework -eq 'net10.0-windows') `
+        -Message 'The application must target net10.0-windows.'
+    Assert-RepositoryContract `
+        -Condition ([string]$testProject.Project.PropertyGroup.TargetFramework -eq 'net10.0-windows') `
+        -Message 'The test project must target net10.0-windows.'
+
+    $expectedPackages = [ordered]@{
+        'System.IO.Ports' = @($appProject, '10.0.12')
+        'Microsoft.NET.Test.Sdk' = @($testProject, '18.10.0')
+        'xunit.v3' = @($testProject, '4.0.0')
+        'xunit.runner.visualstudio' = @($testProject, '4.0.0')
+        'xunit.analyzers' = @($testProject, '2.1.0')
+        'coverlet.collector' = @($testProject, '10.0.1')
+    }
+    foreach ($packageName in $expectedPackages.Keys) {
+        $projectAndVersion = $expectedPackages[$packageName]
+        $actualVersion = Get-PackageVersion -Project $projectAndVersion[0] -PackageName $packageName
+        $expectedVersion = $projectAndVersion[1]
+        Assert-RepositoryContract `
+            -Condition ($actualVersion -eq $expectedVersion) `
+            -Message "Package $packageName must be pinned to $expectedVersion; found '$actualVersion'."
+    }
+
+    foreach ($lockFile in @(
+        'src/CodexTray/packages.lock.json',
+        'tests/CodexTray.Tests/packages.lock.json'
+    )) {
+        Assert-RepositoryContract `
+            -Condition (Test-Path -LiteralPath $lockFile -PathType Leaf) `
+            -Message "NuGet lock file is missing: $lockFile"
+    }
+
+    $bootstrapText = Get-Content -LiteralPath 'scripts/bootstrap-build-tools.ps1' -Raw
+    Assert-RepositoryContract `
+        -Condition ($bootstrapText -notmatch '(?i)Invoke-WebRequest') `
+        -Message 'The bootstrap script must not download remote scripts with Invoke-WebRequest.'
+    Assert-RepositoryContract `
+        -Condition ($bootstrapText -notmatch '(?i)dotnet-install\.ps1') `
+        -Message 'The bootstrap script must not download or execute dotnet-install.ps1.'
 }
 finally {
     Pop-Location

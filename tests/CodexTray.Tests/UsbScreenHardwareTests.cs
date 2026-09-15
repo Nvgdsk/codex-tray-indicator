@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace CodexTray.Tests;
@@ -7,7 +8,10 @@ namespace CodexTray.Tests;
 // Explicit opt-in prevents ordinary builds from taking a port owned by the tray.
 public sealed class UsbScreenHardwareFactAttribute : FactAttribute
 {
-    public UsbScreenHardwareFactAttribute()
+    public UsbScreenHardwareFactAttribute(
+        [CallerFilePath] string? sourceFilePath = null,
+        [CallerLineNumber] int sourceLineNumber = -1)
+        : base(sourceFilePath, sourceLineNumber)
     {
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CODEXTRAY_TEST_USB_PORT")))
             Skip = "Run scripts/test-usb-screen.ps1 with the tray USB output stopped.";

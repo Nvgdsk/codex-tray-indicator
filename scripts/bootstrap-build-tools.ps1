@@ -1,43 +1,115 @@
+[CmdletBinding()]
+param()
+
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$repositoryRoot = Split-Path -Parent $PSScriptRoot
+$requiredDotNetVersion = '10.0.401'
+$requiredInnoVersion = '7.1.0'
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $toolRoot = Join-Path $repositoryRoot '.tools'
-$dotnetRoot = Join-Path $toolRoot 'dotnet'
-$dotnetExe = Join-Path $dotnetRoot 'dotnet.exe'
-$installerScript = Join-Path $toolRoot 'dotnet-install.ps1'
 $env:DOTNET_CLI_HOME = Join-Path $toolRoot 'dotnet-home'
 $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
+$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 
-New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null
+function Get-DotNetExecutable {
+    $command = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    $commandSource = if ($null -eq $command) { $null } else { $command.Source }
+    $candidates = @(
+        $commandSource,
+        (Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'),
+        (Join-Path $toolRoot 'dotnet\dotnet.exe')
+    ) | Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_) -and
+        (Test-Path -LiteralPath $_ -PathType Leaf)
+    } | Select-Object -Unique
 
-if (-not (Test-Path -LiteralPath $dotnetExe)) {
-    Invoke-WebRequest 'https://dot.net/v1/dotnet-install.ps1' -OutFile $installerScript
-    & $installerScript -Channel 8.0 -InstallDir $dotnetRoot -NoPath
-    if (-not $?) {
-        throw 'dotnet-install.ps1 failed.'
+    foreach ($candidate in $candidates) {
+        $savedErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $version = & $candidate --version 2>$null
+            $candidateExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $savedErrorActionPreference
+        }
+        if ($candidateExitCode -eq 0 -and $version -eq $requiredDotNetVersion) {
+            return $candidate
+        }
     }
+
+    return $null
 }
 
-$innoCandidates = @(
-    (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe'),
-    (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
-    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe')
-)
+function Get-InnoCompiler {
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 7\ISCC.exe'),
+        (Join-Path $env:ProgramFiles 'Inno Setup 7\ISCC.exe'),
+        (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
+    ) | Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_) -and
+        (Test-Path -LiteralPath $_ -PathType Leaf)
+    }
 
-$innoCompiler = $innoCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
-if (-not $innoCompiler) {
+    foreach ($candidate in $candidates) {
+        $savedErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $version = & $candidate --version 2>$null
+            $candidateExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $savedErrorActionPreference
+        }
+        if ($candidateExitCode -eq 0 -and ([string]$version).Trim() -eq $requiredInnoVersion) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Install-ExactWingetPackage {
+    param(
+        [Parameter(Mandatory)][string]$PackageId,
+        [Parameter(Mandatory)][string]$Version
+    )
+
     $winget = Get-Command winget.exe -ErrorAction Stop
-    & $winget.Source install --id JRSoftware.InnoSetup --exact --scope user --silent --accept-package-agreements --accept-source-agreements
+    & $winget.Source install `
+        --id $PackageId `
+        --version $Version `
+        --exact `
+        --silent `
+        --accept-package-agreements `
+        --accept-source-agreements `
+        --disable-interactivity
     if ($LASTEXITCODE -ne 0) {
-        throw "Inno Setup installation failed with exit code $LASTEXITCODE."
+        throw "winget failed to install $PackageId $Version with exit code $LASTEXITCODE."
     }
-    $innoCompiler = $innoCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 }
 
-if (-not $innoCompiler) {
-    throw 'ISCC.exe was not found after Inno Setup installation.'
+$dotnetExecutable = Get-DotNetExecutable
+if ($null -eq $dotnetExecutable) {
+    Install-ExactWingetPackage -PackageId 'Microsoft.DotNet.SDK.10' -Version $requiredDotNetVersion
+    $dotnetExecutable = Get-DotNetExecutable
+}
+if ($null -eq $dotnetExecutable) {
+    throw ".NET SDK $requiredDotNetVersion was not found after installation."
 }
 
-& $dotnetExe --version
+$innoCompiler = Get-InnoCompiler
+if ($null -eq $innoCompiler) {
+    Install-ExactWingetPackage -PackageId 'JRSoftware.InnoSetup.7' -Version $requiredInnoVersion
+    $innoCompiler = Get-InnoCompiler
+}
+if ($null -eq $innoCompiler) {
+    throw "Inno Setup $requiredInnoVersion was not found after installation."
+}
+
+Write-Output "DOTNET=$dotnetExecutable"
+Write-Output "DOTNET_VERSION=$requiredDotNetVersion"
 Write-Output "ISCC=$innoCompiler"
+Write-Output "INNO_VERSION=$requiredInnoVersion"

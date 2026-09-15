@@ -80,10 +80,10 @@ public sealed class IpcIntegrationTests
 
         IpcResponse? response = await client.SendAsync(request, true, CancellationToken.None);
 
-        Assert.Equal(request, await received.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(request, await received.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
         Assert.Equal(new IpcResponse(true, TrayState.Busy, null), response);
         cancellation.Cancel();
-        await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await serverTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -118,11 +118,11 @@ public sealed class IpcIntegrationTests
         Task<IpcResponse?>[] sends = Enumerable.Range(0, 20)
             .Select(_ => client.SendAsync(IpcMessage.ForState(TrayState.Ready), true, CancellationToken.None))
             .ToArray();
-        IpcResponse?[] responses = await Task.WhenAll(sends).WaitAsync(TimeSpan.FromSeconds(5));
+        IpcResponse?[] responses = await Task.WhenAll(sends).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         Assert.All(responses, response => Assert.Equal(new IpcResponse(true, TrayState.Ready, null), response));
         cancellation.Cancel();
-        await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await serverTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -151,10 +151,10 @@ public sealed class IpcIntegrationTests
 
         await SendRaw(pipeName, payload);
 
-        Exception error = await protocolError.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Exception error = await protocolError.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         Assert.IsAssignableFrom<InvalidDataException>(error);
         cancellation.Cancel();
-        await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await serverTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class IpcIntegrationTests
 
         cancellation.Cancel();
 
-        await serverTask.WaitAsync(TimeSpan.FromSeconds(2));
+        await serverTask.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
     }
 
     private static async Task RunOneServerCycle(string pipeName, TrayState state)

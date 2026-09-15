@@ -1,5 +1,5 @@
-using System.IO.Ports;
 using System.Drawing;
+using System.IO.Ports;
 
 namespace CodexTray;
 

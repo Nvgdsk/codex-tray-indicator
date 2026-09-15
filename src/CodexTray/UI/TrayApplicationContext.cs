@@ -111,19 +111,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
             switch (message.Kind)
             {
                 case IpcMessageKind.Event:
-                {
-                    CodexHookEvent hookEvent = message.ToCodexHookEvent();
-                    StateTransition transition = _stateStore.Apply(hookEvent);
-                    PostTransition(transition, hookEvent.Name);
-                    return Task.FromResult(new IpcResponse(true, transition.Current, null));
-                }
+                    {
+                        CodexHookEvent hookEvent = message.ToCodexHookEvent();
+                        StateTransition transition = _stateStore.Apply(hookEvent);
+                        PostTransition(transition, hookEvent.Name);
+                        return Task.FromResult(new IpcResponse(true, transition.Current, null));
+                    }
 
                 case IpcMessageKind.SetState:
-                {
-                    StateTransition transition = _stateStore.SetSynthetic(message.State!.Value);
-                    PostTransition(transition, cause: null);
-                    return Task.FromResult(new IpcResponse(true, transition.Current, null));
-                }
+                    {
+                        StateTransition transition = _stateStore.SetSynthetic(message.State!.Value);
+                        PostTransition(transition, cause: null);
+                        return Task.FromResult(new IpcResponse(true, transition.Current, null));
+                    }
 
                 case IpcMessageKind.QueryState:
                     return Task.FromResult(new IpcResponse(true, _stateStore.Current, null));

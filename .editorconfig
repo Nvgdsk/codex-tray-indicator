@@ -30,3 +30,7 @@ indent_size = 4
 
 [*.md]
 trim_trailing_whitespace = false
+
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1859.severity = none

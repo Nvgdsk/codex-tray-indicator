@@ -26,7 +26,7 @@ public sealed class UsbScreenControllerTests
         await using var controller = new UsbScreenController(connector, new(), TrayState.Inactive, TimeSpan.FromSeconds(10));
         try
         {
-            await started.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
             controller.SetState(TrayState.Busy);
             controller.SetState(TrayState.Ready);
             controller.SetState(TrayState.Error);
@@ -35,7 +35,7 @@ public sealed class UsbScreenControllerTests
         {
             release.Set();
         }
-        await finished.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await finished.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.Equal(new[] { TrayState.Inactive, TrayState.Error }, frames.ToArray());
     }
 
@@ -48,7 +48,7 @@ public sealed class UsbScreenControllerTests
         var healthy = new FakeConnection((state, _) => shown.TrySetResult(state));
         var connector = new FakeConnector(() => "COM3", () => Interlocked.Increment(ref connections) == 1 ? broken : healthy);
         await using var controller = new UsbScreenController(connector, new(), TrayState.Busy, TimeSpan.FromMilliseconds(20));
-        Assert.Equal(TrayState.Busy, await shown.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+        Assert.Equal(TrayState.Busy, await shown.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
         Assert.True(broken.Disposed);
         Assert.Equal(2, connections);
         await controller.StopAsync();
@@ -65,14 +65,16 @@ public sealed class UsbScreenControllerTests
             () => Interlocked.Increment(ref probes) == 1 ? null : "COM3",
             () => new FakeConnection((state, _) => shown.TrySetResult(state)));
         await using var controller = new UsbScreenController(connector, new(), TrayState.Ready, TimeSpan.FromMilliseconds(20));
-        Assert.Equal(TrayState.Ready, await shown.Task.WaitAsync(TimeSpan.FromSeconds(3)));
+        Assert.Equal(TrayState.Ready, await shown.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
         Assert.True(probes >= 2);
     }
 
     [Fact]
     public async Task DisabledDisplay_DoesNotProbeOrOpenSerialPorts()
     {
-        var connector = new FakeConnector(() => throw new Exception("Must not probe"), () => throw new Exception("Must not open"));
+        var connector = new FakeConnector(
+            () => throw new IOException("Must not probe"),
+            () => throw new IOException("Must not open"));
         await using var controller = new UsbScreenController(connector, new("OFF"), TrayState.Ready, TimeSpan.FromMilliseconds(20));
         await controller.StopAsync();
         Assert.Equal(0, connector.Resolutions);
@@ -87,7 +89,7 @@ public sealed class UsbScreenControllerTests
         var replacement = new FakeConnection((state, _) => restored.TrySetResult(state));
         var connector = new FakeConnector(() => "COM3", () => Interlocked.Increment(ref connections) == 1 ? stale : replacement);
         await using var controller = new UsbScreenController(connector, new(), TrayState.Ready, TimeSpan.FromMilliseconds(20));
-        Assert.Equal(TrayState.Ready, await restored.Task.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(TrayState.Ready, await restored.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
         Assert.True(stale.Disposed);
         Assert.Equal(2, connections);
     }
@@ -112,11 +114,11 @@ public sealed class UsbScreenControllerTests
             return connection;
         });
         await using var controller = new UsbScreenController(connector, new(), TrayState.Ready, TimeSpan.FromSeconds(10));
-        await first.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await first.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         controller.Reconnect();
-        await second.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await second.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         controller.Configure(new("AUTO", ScreenOrientation.Landscape));
-        await third.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await third.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.Equal(new[]
         {
             (TrayState.Ready, ScreenOrientation.Portrait),
@@ -148,13 +150,13 @@ public sealed class UsbScreenControllerTests
         var connector = new FakeConnector(() => "COM3", () => connection);
         await using var controller = new UsbScreenController(connector, new(), TrayState.Ready,
             TimeSpan.FromMilliseconds(20), timeProvider: clock);
-        await first.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await first.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         clock.Advance(TimeSpan.FromSeconds(10));
-        await animated.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await animated.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         controller.SetState(TrayState.Busy);
-        await busy.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await busy.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         clock.Advance(TimeSpan.FromSeconds(30));
-        await jumped.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await jumped.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.Equal(new[] { (TrayState.Ready, 0L), (TrayState.Ready, 1L), (TrayState.Busy, 1L), (TrayState.Busy, 4L) }, frames.ToArray());
     }
 
@@ -170,10 +172,10 @@ public sealed class UsbScreenControllerTests
         var connector = new FakeConnector(() => "COM3", () => connection);
         await using var controller = new UsbScreenController(connector, new(AnimationEnabled: false, MascotEnabled: false), TrayState.Ready,
             TimeSpan.FromMilliseconds(20), timeProvider: clock);
-        await first.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await first.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         clock.Advance(TimeSpan.FromHours(1));
         controller.SetState(TrayState.Ready);
-        await checkedConnection.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await checkedConnection.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.Equal(new long[] { 0 }, frames.ToArray());
     }
 
@@ -194,9 +196,9 @@ public sealed class UsbScreenControllerTests
         var connector = new FakeConnector(() => "COM3", () => connection);
         await using var controller = new UsbScreenController(connector, new(AnimationEnabled: false), TrayState.Busy,
             TimeSpan.FromMilliseconds(20), timeProvider: clock);
-        await first.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await first.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         clock.Advance(TimeSpan.FromMilliseconds(500));
-        await next.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await next.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
         Assert.Equal(new[] { (TrayState.Busy, 0L, 0L), (TrayState.Busy, 0L, 1L) }, frames.ToArray());
     }
 

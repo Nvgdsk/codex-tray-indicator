@@ -58,7 +58,7 @@ public sealed class SingleInstanceIntegrationTests
                     if (!owner.HasExited)
                     {
                         owner.Kill(entireProcessTree: true);
-                        await owner.WaitForExitAsync();
+                        await owner.WaitForExitAsync(TestContext.Current.CancellationToken);
                     }
                 }
 
