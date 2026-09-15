@@ -102,7 +102,7 @@
 - Consumes: tracked-file inventory and MIT ownership decision `Vasyl Danyliuk`.
 - Produces: a source-only Git boundary and an executable repository-contract check.
 
-- [ ] **Step 1: Add the failing repository-contract check**
+- [x] **Step 1: Add the failing repository-contract check**
 
   Create `scripts/test-repository-contract.ps1` with terminating assertions that:
 
@@ -116,7 +116,7 @@
 
   Expected: nonzero exit, identifying the missing legal/hygiene files and currently tracked `dist` content.
 
-- [ ] **Step 2: Implement the repository boundary**
+- [x] **Step 2: Implement the repository boundary**
 
   Update `.gitignore` to cover `.tools/`, `artifacts/`, `dist/`, `**/bin/`, `**/obj/`, `TestResults/`, `*.trx`, `*.coverage*`, IDE files, and `*.p12`, `*.pfx`, `*.snk`, `*.key`, `*.pem`.
 
@@ -130,13 +130,13 @@
 
   Expected: the paths are staged as deleted from Git, but `Test-Path .\dist\CodexTray.exe`, `Test-Path .\dist\CodexTraySetup.exe`, and `Test-Path .\dist\SHA256SUMS.txt` all return `True` locally.
 
-- [ ] **Step 3: Make the repository contract pass**
+- [x] **Step 3: Make the repository contract pass**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-repository-contract.ps1`
 
   Expected: exit 0 and a concise success message.
 
-- [ ] **Step 4: Commit repository hygiene**
+- [x] **Step 4: Commit repository hygiene**
 
   Run: `git add .gitattributes .editorconfig .gitignore LICENSE scripts/test-repository-contract.ps1; git diff --cached --check; git commit -m "chore: establish open-source repository hygiene"`
 
