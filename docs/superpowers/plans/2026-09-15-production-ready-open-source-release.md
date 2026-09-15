@@ -235,7 +235,7 @@
 - Consumes: `<Version>1.3.0</Version>` from `src/CodexTray/CodexTray.csproj`, exact .NET/Inno tools, and explicit `-AllowUnsigned` acknowledgement.
 - Produces: exactly `dist/CodexTray.exe`, `dist/CodexTraySetup.exe`, and `dist/SHA256SUMS.txt`, all validated before release use.
 
-- [ ] **Step 1: Write failing release-contract tests**
+- [x] **Step 1: Write failing release-contract tests**
 
   Add tests that read the repository files and require:
 
@@ -252,33 +252,33 @@
 
   Expected: nonzero exit because the installer and build script still violate the new contract.
 
-- [ ] **Step 2: Parameterize the installer version**
+- [x] **Step 2: Parameterize the installer version**
 
   Add a required `MyAppVersion` preprocessor define in `installer/CodexTray.iss`, bind `AppVersion` to it, and keep all install/uninstall behavior unchanged.
 
-- [ ] **Step 3: Harden the release script**
+- [x] **Step 3: Harden the release script**
 
   Add `[switch]$AllowUnsigned`; resolve `dotnet` from the pinned SDK environment; parse and validate the project version; pass it to Inno Setup 7.1.0; preserve the current safe-directory reset checks; run locked restore, Release build/test, and publish; validate x64 PE32+ Windows GUI shape; require exactly the three declared assets; verify both Authenticode states; require explicit allowance when they are unsigned; write then independently re-read SHA-256 checksums; reject duplicate, missing, or unexpected checksum entries.
 
-- [ ] **Step 4: Make the release-contract tests pass**
+- [x] **Step 4: Make the release-contract tests pass**
 
   Run: `dotnet test .\tests\CodexTray.Tests\CodexTray.Tests.csproj --configuration Release --no-restore --filter FullyQualifiedName~ReleaseContractTests`
 
   Expected: exit 0.
 
-- [ ] **Step 5: Verify that unsigned output cannot be accidental**
+- [x] **Step 5: Verify that unsigned output cannot be accidental**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1`
 
   Expected: nonzero exit with a clear message requiring `-AllowUnsigned`; no release is reported as successful.
 
-- [ ] **Step 6: Build and verify the explicitly unsigned release**
+- [x] **Step 6: Build and verify the explicitly unsigned release**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -AllowUnsigned`
 
   Expected: exit 0; exact three-file output; both executables report unsigned/NotSigned; checksum verification succeeds.
 
-- [ ] **Step 7: Commit release hardening**
+- [x] **Step 7: Commit release hardening**
 
   Run: `git add installer/CodexTray.iss scripts/build-release.ps1 tests/CodexTray.Tests/ReleaseContractTests.cs; git diff --cached --check; git commit -m "build: enforce reproducible unsigned release contract"`
 
