@@ -21,8 +21,9 @@ future signing.
 
 ## Current State
 
-- The application targets .NET 8 for Windows x64 and is published as a
-  self-contained single-file WinForms executable.
+- The application currently targets .NET 8 for Windows x64 and is published as
+  a self-contained single-file WinForms executable. The public v1.3.0 release
+  will migrate to .NET 10 LTS because .NET 8 support ends on 2026-11-10.
 - Inno Setup produces a per-user installer.
 - Codex lifecycle events arrive through hooks configured in one selected WSL
   distribution and cross into Windows through a current-user-only named pipe.
@@ -72,10 +73,25 @@ The release build passes that version to Inno Setup so the installer definition
 does not carry an independently editable version number. A release job rejects
 a tag whose semantic version differs from the project version.
 
-The repository pins a .NET 8 SDK through `global.json`. NuGet dependency lock
-files are committed, and CI restores in locked mode. CI builds use deterministic
-and continuous-integration build properties. GitHub Actions dependencies are
-pinned to immutable commit SHAs.
+The repository pins .NET 10 SDK 10.0.401 through `global.json` and targets
+`net10.0-windows`. The self-contained release remains Windows x64 and does not
+require an end user to install .NET separately. NuGet dependency lock files are
+committed, and CI restores in locked mode. CI builds use deterministic and
+continuous-integration build properties. GitHub Actions dependencies are pinned
+to immutable commit SHAs.
+
+The migration uses supported stable packages current at design approval:
+
+- `System.IO.Ports` 10.0.12;
+- `Microsoft.NET.Test.Sdk` 18.10.0;
+- `xunit.v3` 4.0.0;
+- `xunit.runner.visualstudio` 4.0.0;
+- `xunit.analyzers` 2.1.0;
+- `coverlet.collector` 10.0.1.
+
+The existing xUnit.net v2 package is deprecated, so the test project moves to
+xUnit.net v3 as part of the framework migration. Test semantics and hardware
+opt-in behavior must remain unchanged.
 
 The build script keeps its existing path-safety checks and validates:
 
@@ -224,7 +240,8 @@ Every stage requires explicit owner approval before it begins.
 2. **Open-source files and repository hygiene.** Add legal, community, security,
    bilingual documentation, and ignore rules; remove tracked executables from
    the repository index without deleting the user's local release copies.
-3. **Build hardening.** Add SDK and dependency pinning, analyzers, single-source
+3. **.NET 10 and build hardening.** Migrate the application and tests to .NET 10
+   LTS and xUnit.net v3; add SDK and dependency pinning, analyzers, single-source
    versioning, unsigned-release acknowledgement, and corresponding tests.
 4. **GitHub automation.** Add CI, Dependabot, issue forms, and draft-release
    workflows with least-privilege permissions and immutable action references.
