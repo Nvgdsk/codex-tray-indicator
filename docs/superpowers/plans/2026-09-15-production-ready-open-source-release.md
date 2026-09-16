@@ -396,13 +396,13 @@ helper paths during final verification before release publication.
 - Consumes: clean source checkout, pinned GitHub Action SHAs, global SDK pin, NuGet lock files.
 - Produces: PR/push quality gates with read-only permissions and failure-only diagnostics.
 
-- [ ] **Step 1: Resolve immutable action SHAs from official release tags**
+- [x] **Step 1: Resolve immutable action SHAs from official release tags**
 
   Resolve the full commit SHA for `actions/checkout` v7.0.1, `actions/setup-dotnet` v6.0.0, and `actions/upload-artifact` v7.0.1 using `git ls-remote` against each official GitHub repository. Select the peeled tag target when present, otherwise the direct tag target; validate each value against `^[0-9a-f]{40,64}$`; record the release tag in an inline workflow comment beside the SHA.
 
   Expected: three full immutable SHAs, with no branch or floating major-version reference.
 
-- [ ] **Step 2: Add failing workflow-contract assertions**
+- [x] **Step 2: Add failing workflow-contract assertions**
 
   Require pull-request and push triggers; `windows-latest`; top-level `permissions: contents: read`; concurrency cancellation; only full-length SHA `uses:` references; pinned global JSON setup with NuGet cache; locked restore; format verification; Release build; non-hardware tests; transitive vulnerability audit; and diagnostic artifact upload guarded by `failure()`.
 
@@ -410,17 +410,38 @@ helper paths during final verification before release publication.
 
   Expected: nonzero exit because `ci.yml` is absent.
 
-- [ ] **Step 3: Implement CI in gate order**
+- [x] **Step 3: Implement CI in gate order**
 
   Create one Windows job that checks out without persisted credentials, sets up the SDK from `global.json`, restores with `--locked-mode`, verifies format with `--no-restore`, builds Release with `--no-restore`, tests Release with `--no-build --no-restore --logger trx`, runs `dotnet list .\CodexTray.sln package --vulnerable --include-transitive`, and uploads only `TestResults/**/*.trx` on failure for seven days. Set `CODEXTRAY_TEST_USB_PORT` to an empty value and never invoke the USB hardware script.
 
-- [ ] **Step 4: Verify workflow policy and commit**
+- [x] **Step 4: Verify workflow policy and commit**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-repository-contract.ps1`
 
   Run: `git add .github/workflows/ci.yml scripts/test-repository-contract.ps1; git diff --cached --check; git commit -m "ci: add locked Windows quality gates"`
 
   Expected: contract exits 0; commit succeeds; no write permission or secret reference exists.
+
+**Task 7 execution notes:**
+
+- Microsoft.Testing.Platform rejects the planned VSTest-only `--logger trx`.
+  Use xUnit's built-in `--report-xunit-trx --report-xunit-trx-filename ci.trx`
+  after the `--` separator instead; the actual command passed 178 pure tests
+  and generated `TestResults/ci.trx` without adding a dependency.
+- Hosted CI excludes both `Integration` (real Ubuntu WSL required) and
+  `UsbHardware`; full local integration verification remains in Task 9.
+- The dependency audit parses version-1 JSON and fails on reported direct or
+  transitive vulnerabilities, audit problems/errors, malformed or incomplete
+  reports, and nonzero native command exit. The real audit and 12 controlled
+  acceptance/rejection fixtures passed.
+- SDK setup declares both exact `dotnet-version: 10.0.401` and `global.json`,
+  then checks the selected SDK exactly matches the pin. This fails closed if
+  the global `latestPatch` roll-forward would select a different hosted SDK.
+- Fresh local gates with `CI=true` passed locked restore with transitive NuGet
+  audit, formatting, Release build (zero warnings/errors), and 178 pure tests.
+  Independent duplicate-key-aware YAML policy checks, PowerShell syntax checks,
+  the repository contract, and whitespace checks passed. Implementation commit:
+  `e361e17`. No hosted GitHub run, push, tag, or publication occurred.
 
 ---
 
