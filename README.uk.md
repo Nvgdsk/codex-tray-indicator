@@ -141,11 +141,21 @@ Setup вмикає його лише після успішного запису 
 і моргає, у Busy друкує, в Inactive спить, в Error піднімає руки.
 Персонаж оновлюється кожні 500 мс частковими кадрами; вимкнення повертає кольорове коло.
 
+Під станом рядок **Weekly remaining: 72%** показує залишок тижневого ліміту
+Codex зі смугою залишку. Індикатор читає дані акаунта, у який виконано вхід у Codex
+вибраного WSL-дистрибутива, при запуску та щохвилини, поки USB-вивід увімкнений.
+Читання працює незалежно від анімації й не запускає prompts.
+Залишок обчислюється як `100 - usedPercent` для семиденного ліміту Codex.
+Якщо тижневий ліміт відсутній, дані прострочені, виникла помилка входу/API або
+дистрибутив не вибраний, екран показує **—** та порожню смугу.
+Помилка читання ліміту не змінює lifecycle-стан. При залишку 25% смуга стає жовтою,
+а при 10% — червоною. Дані ліміту зберігаються лише в пам’яті.
+
 Рендеринг і serial-записи працюють в окремому worker, який зберігає лише останній стан у черзі.
 USB-перевірки й повторні підключення не опитують Codex або WSL.
 USB-помилки показуються окремо в меню та не змінюють стан Codex.
 Preferences зберігаються в `HKCU/Software/CodexTray`.
-Екран отримує графіку статусу, а не prompts, responses чи session IDs.
+Екран отримує графіку статусу й ліміту, а не prompts, responses чи session IDs.
 
 <a id="wsl-selection"></a>
 
@@ -259,7 +269,11 @@ dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --fi
 
 Повні тести включають реальну WSL-інтеграцію та потребують дистрибутива з назвою
 `Ubuntu`, де Codex видимий через `sh -lc`.
-USB hardware tests пропускаються без явного ввімкнення:
+USB hardware tests пропускаються без явного ввімкнення.
+
+Тест реального тижневого ліміту також пропускається, якщо
+`CODEXTRAY_TEST_WEEKLY_DISTRIBUTION` не задано. Для його свідомого ввімкнення
+використовуйте окремі команди нижче.
 
 ```powershell
 dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore
@@ -287,7 +301,9 @@ Opt-in USB hardware tests записують кадри на фізичний е
 ```powershell
 $previousUsbPort = $env:CODEXTRAY_TEST_USB_PORT
 $previousUsbOrientation = $env:CODEXTRAY_TEST_USB_ORIENTATION
+$previousWeeklyDistribution = $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION
 try {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $null
     $env:CODEXTRAY_TEST_USB_PORT = 'COM3'
     $env:CODEXTRAY_TEST_USB_ORIENTATION = 'Portrait'
     dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --filter 'Category=UsbHardware'
@@ -295,12 +311,77 @@ try {
 finally {
     $env:CODEXTRAY_TEST_USB_PORT = $previousUsbPort
     $env:CODEXTRAY_TEST_USB_ORIENTATION = $previousUsbOrientation
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $previousWeeklyDistribution
 }
 ```
 
 Прев’ю зберігаються в `artifacts/usb-screen-previews`.
 Serial-запис не доводить правильні пікселі: перегляньте фізичний екран самостійно,
 після чого поверніть Automatic або потрібний порт.
+
+### Тести тижневого ліміту
+
+Автоматизована команда вище перевіряє парсинг ліміту, помилки й відновлення,
+скасування, рендеринг та повні/часткові кадри на синтетичних даних, без запитів
+до акаунта та записів на фізичний USB-екран. Синтетичні прев’ю зберігаються в
+`tests/CodexTray.Tests/bin/Release/net10.0-windows/weekly-limit-previews`
+як `Weekly-Portrait.png`, `Weekly-Landscape.png` і відповідні файли `Unavailable-`.
+
+Наступний integration test виконує **автентифікований мережевий запит** через
+`codex app-server` у WSL. Використовуйте дистрибутив, де вже виконано вхід у Codex
+і команда видима через `sh -lc`; замініть `Ubuntu` на його справжню назву.
+Індикатору не потрібні сертифікат, ключ, пароль або файл облікових даних.
+Ця окрема команда не запускає tray, не записує на USB і не надсилає prompt.
+
+```powershell
+$previousWeeklyDistribution = $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION
+try {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = 'Ubuntu'
+    dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --filter 'FullyQualifiedName~WeeklyLimitIntegrationTests'
+    if ($LASTEXITCODE -ne 0) { throw 'Weekly-limit account test failed.' }
+}
+finally {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $previousWeeklyDistribution
+}
+```
+
+Для успіху потрібен дійсний, непрострочений тижневий ліміт. Непідтримуваний
+акаунт/API, відсутній ліміт або помилка входу завершують тест невдачею, хоча
+застосунок правильно показує **—**. Тест зберігає `live-limit.json` (відсоток і час
+скидання) та `Live-Portrait.png` у тому самому каталозі прев’ю. Це особисті дані
+акаунта: залишайте їх локально й не додавайте до публічних звітів. Build/test output
+ігнорується Git; Codex app-server усе одно може використовувати звичайну діагностику Codex.
+
+Щоб показати реальний тижневий ліміт на підтримуваному Revision A USB-екрані,
+закрийте vendor apps і спочатку виберіть **USB screen → Off** у tray.
+Вкажіть справжній COM-порт, який вибирає Automatic detection; інші порти тест
+відхиляє. Цей тест і запитує акаунт, і записує один кадр на фізичний екран:
+
+```powershell
+$previousWeeklyDistribution = $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION
+$previousUsbPort = $env:CODEXTRAY_TEST_USB_PORT
+$previousUsbOrientation = $env:CODEXTRAY_TEST_USB_ORIENTATION
+try {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = 'Ubuntu'
+    $env:CODEXTRAY_TEST_USB_PORT = 'COM3'
+    $env:CODEXTRAY_TEST_USB_ORIENTATION = 'Portrait'
+    dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --filter 'FullyQualifiedName~WeeklyLimitHardwareTests'
+    if ($LASTEXITCODE -ne 0) { throw 'Weekly-limit USB test failed.' }
+}
+finally {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $previousWeeklyDistribution
+    $env:CODEXTRAY_TEST_USB_PORT = $previousUsbPort
+    $env:CODEXTRAY_TEST_USB_ORIENTATION = $previousUsbOrientation
+}
+```
+
+Hardware test пропускається, якщо не задано обидві змінні — дистрибутив і порт.
+Для горизонтального режиму задайте `Landscape`; перевернуті режими —
+`ReversePortrait` і `ReverseLandscape`. Перевірте відсоток, текст і смугу на самому
+екрані: успішний serial-запис не доводить правильні пікселі. Після тесту вручну
+поверніть попереднє налаштування USB у tray; блоки `finally` відновлюють лише
+змінні середовища. Обидва реальні тести не замінюють приймання lifecycle,
+перепідключення та інсталятора.
 
 Перед прийманням релізу вручну перевірте setup, hook Trust, старт сесії → Ready,
 prompt → Busy, звичайне завершення → Ready з одним повідомленням, Ctrl+C → Ready,
@@ -389,7 +470,11 @@ Prompts, responses, transcript paths, робочі каталоги та model m
 Hooks працюють fail-open: некоректний вхід, offline tray або IPC timeout повертають
 exit code 0, щоб індикатор не блокував Codex.
 Бюджет pipe connect — 250 мс, I/O обмежений.
-Індикатор не надсилає network requests і не пише per-event state files, logs або registry values.
+Для читання тижневого ліміту Codex app-server у вибраному WSL-дистрибутиві запитує
+ліміти акаунта в OpenAI через мережу з наявною автентифікацією цього Codex-акаунта.
+Індикатор зберігає лише тижневий відсоток і час скидання в пам’яті, не читає й не
+копіює credentials. Codex app-server може використовувати звичайну діагностику Codex.
+Індикатор не пише per-event state files, logs або registry values.
 .NET single-file runtime може розпакувати native libraries при запуску; це не status log.
 
 Під час встановлення/налаштування зберігаються `~/.codex/hooks.json`,

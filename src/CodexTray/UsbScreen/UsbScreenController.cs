@@ -33,6 +33,7 @@ internal sealed class UsbScreenController : IAsyncDisposable
     private readonly Task _worker;
     private UsbScreenOptions _options;
     private TrayState _state;
+    private WeeklyLimit? _weeklyLimit;
     private long _version;
     private int _stopping;
     private string _status = "USB screen: Connecting...";
@@ -58,6 +59,12 @@ internal sealed class UsbScreenController : IAsyncDisposable
     public void SetState(TrayState state)
     {
         lock (_gate) _state = state;
+        _changes.Writer.TryWrite(0);
+    }
+
+    public void SetWeeklyLimit(WeeklyLimit? limit)
+    {
+        lock (_gate) _weeklyLimit = limit;
         _changes.Writer.TryWrite(0);
     }
 
@@ -99,6 +106,7 @@ internal sealed class UsbScreenController : IAsyncDisposable
         IUsbScreenConnection? connection = null;
         string? connectedPort = null;
         TrayState? displayedState = null;
+        WeeklyLimit? displayedWeeklyLimit = null;
         long? displayedAnimationStep = null;
         long? displayedMascotFrame = null;
         long? lastPortProbe = null;
@@ -118,6 +126,7 @@ internal sealed class UsbScreenController : IAsyncDisposable
             connection = null;
             connectedPort = null;
             displayedState = null;
+            displayedWeeklyLimit = null;
             displayedAnimationStep = null;
             displayedMascotFrame = null;
         }
@@ -129,8 +138,10 @@ internal sealed class UsbScreenController : IAsyncDisposable
                 while (_changes.Reader.TryRead(out _)) { }
                 UsbScreenOptions options;
                 TrayState state;
+                WeeklyLimit? weeklyLimit;
                 long version;
-                lock (_gate) (options, state, version) = (_options, _state, _version);
+                lock (_gate) (options, state, version, weeklyLimit) = (_options, _state, _version, _weeklyLimit);
+                if (weeklyLimit is not null && weeklyLimit.ResetsAt <= _clock.GetUtcNow()) weeklyLimit = null;
                 try
                 {
                     if (appliedVersion != version)
@@ -175,12 +186,14 @@ internal sealed class UsbScreenController : IAsyncDisposable
                                 ? _clock.GetElapsedTime(_animationStarted).Ticks / _animationInterval.Ticks : 0;
                             long mascotFrame = options.MascotEnabled
                                 ? _clock.GetElapsedTime(_animationStarted).Ticks / _mascotInterval.Ticks : 0;
-                            if (displayedState != state || displayedAnimationStep != animationStep || displayedMascotFrame != mascotFrame)
+                            if (displayedState != state || displayedAnimationStep != animationStep || displayedMascotFrame != mascotFrame ||
+                                displayedWeeklyLimit != weeklyLimit)
                             {
-                                connection.Show(state, options.Orientation, token, animationStep, mascotFrame, options.MascotEnabled);
+                                connection.Show(state, options.Orientation, token, animationStep, mascotFrame, options.MascotEnabled, weeklyLimit);
                                 displayedState = state;
                                 displayedAnimationStep = animationStep;
                                 displayedMascotFrame = mascotFrame;
+                                displayedWeeklyLimit = weeklyLimit;
                             }
                             else
                             {

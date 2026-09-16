@@ -21,6 +21,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _notificationsItem;
     private readonly ToolStripMenuItem _usbStatusItem;
     private readonly UsbScreenController _usbScreen;
+    private readonly WeeklyLimitMonitor _weeklyLimitMonitor;
     private UsbScreenOptions _usbScreenOptions;
     private bool _disposed;
 
@@ -80,6 +81,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Visible = true,
         };
         _usbScreen = new UsbScreenController(new UsbScreenConnector(), _usbScreenOptions, _stateStore.Current);
+        _weeklyLimitMonitor = new WeeklyLimitMonitor(new CodexWeeklyLimitSource(() => _settings.WslDistribution),
+            _usbScreen.SetWeeklyLimit, enabled: () => _settings.UsbScreen.Enabled);
         UpdateVisual(_stateStore.Current);
         _usbStatusItem.Text = _usbScreen.Status;
         _usbScreen.StatusChanged += UsbScreenOnStatusChanged;
@@ -260,6 +263,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _settings.UsbScreen = options;
             _usbScreenOptions = options;
             _usbScreen.Configure(options);
+            _weeklyLimitMonitor.Refresh();
         }
         catch (Exception exception)
         {
@@ -311,6 +315,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void TestItemOnClick(object? sender, EventArgs eventArgs)
     {
         _usbScreen.Reconnect();
+        _weeklyLimitMonitor.Refresh();
         StateTransition transition = _stateStore.SetSynthetic(TrayState.Ready);
         PostTransition(transition, cause: null);
     }
@@ -328,6 +333,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _server.ResponseSent -= ServerOnResponseSent;
         _serverCancellation.Cancel();
         _usbScreen.StatusChanged -= UsbScreenOnStatusChanged;
+        _weeklyLimitMonitor.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _usbScreen.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _notifyIcon.Visible = false;
         _notifyIcon.Dispose();

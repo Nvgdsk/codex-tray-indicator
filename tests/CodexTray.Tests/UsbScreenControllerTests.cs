@@ -210,6 +210,26 @@ public sealed class UsbScreenControllerTests
         public void Advance(TimeSpan duration) => Interlocked.Add(ref _ticks, duration.Ticks);
     }
 
+    [Fact]
+    public async Task WeeklyLimit_RedrawsWithoutStateOrAnimationChange()
+    {
+        var initial = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var updated = new TaskCompletionSource<WeeklyLimit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var connection = new FakeConnection((_, _) => { });
+        connection.OnWeeklyLimit = limit =>
+        {
+            if (limit is null) initial.TrySetResult();
+            else updated.TrySetResult(limit);
+        };
+        var connector = new FakeConnector(() => "COM3", () => connection);
+        await using var controller = new UsbScreenController(connector,
+            new(AnimationEnabled: false, MascotEnabled: false), TrayState.Busy, TimeSpan.FromSeconds(10));
+        await initial.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+        var limit = new WeeklyLimit(72, DateTimeOffset.UtcNow.AddDays(1));
+        controller.SetWeeklyLimit(limit);
+        Assert.Equal(limit, await updated.Task.WaitAsync(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken));
+    }
+
     private sealed class FakeConnector(Func<string?> resolve, Func<IUsbScreenConnection> connect) : IUsbScreenConnector
     {
         public int Resolutions;
@@ -228,15 +248,17 @@ public sealed class UsbScreenControllerTests
         public Action<TrayState, ScreenOrientation>? OnShow { get; set; }
         public Action<TrayState, long>? OnFrame { get; set; }
         public Action<TrayState, long, long>? OnMascot { get; set; }
+        public Action<WeeklyLimit?>? OnWeeklyLimit { get; set; }
         public Action? OnCheck { get; init; }
         public void CheckConnection() => OnCheck?.Invoke();
         public void Show(TrayState state, ScreenOrientation orientation, CancellationToken cancellationToken,
-            long animationStep = 0, long mascotFrame = 0, bool mascotEnabled = true)
+            long animationStep = 0, long mascotFrame = 0, bool mascotEnabled = true, WeeklyLimit? weeklyLimit = null)
         {
             show(state, cancellationToken);
             OnShow?.Invoke(state, orientation);
             OnFrame?.Invoke(state, animationStep);
             OnMascot?.Invoke(state, animationStep, mascotFrame);
+            OnWeeklyLimit?.Invoke(weeklyLimit);
         }
         public void TurnOff() => TurnedOff = true;
         public void Dispose() => Disposed = true;

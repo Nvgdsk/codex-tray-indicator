@@ -9,6 +9,8 @@ were not recorded, so no dates are invented here.
 
 ### Added
 
+- Remaining weekly Codex quota percentage and bar on the USB screen, refreshed every minute from the selected WSL account.
+- Unavailable-quota fallback and full-frame refresh when quota changes during mascot animation.
 - Animated pixel robot with Ready, Busy, Inactive and Error poses.
 - Independent 500 ms mascot animation and partial USB-frame updates.
 - English and Ukrainian setup, usage, privacy and troubleshooting guides.

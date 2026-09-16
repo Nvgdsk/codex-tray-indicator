@@ -140,10 +140,19 @@ against image retention or burn-in.
 Busy types, Inactive sleeps, Error raises its arms. The mascot updates every 500 ms
 using partial frames; disabling it restores the colored circle.
 
+Below the state, **Weekly remaining: 72%** shows the remaining weekly Codex
+allowance with a progress bar. The indicator reads the signed-in Codex account
+in the selected WSL distribution at startup and every minute while USB output
+is enabled. Reads run independently of serial animation and never start a prompt.
+The percentage is `100 - usedPercent` for the seven-day Codex quota window.
+Missing weekly limits, expired data, login/API failures, or a missing distribution
+show **—** with an empty bar. Account-read failures do not change lifecycle state.
+The bar turns yellow at 25% remaining and red at 10%. Quota data stays in memory.
+
 Serial rendering/writes run in a separate worker with only the latest pending state.
 USB connection checks/retries do not poll Codex or WSL. USB errors are shown separately
 in the menu and never change the Codex state. Preferences persist under `HKCU/Software/CodexTray`.
-The display receives rendered status graphics, not prompts, responses, or session IDs.
+The display receives rendered status and quota graphics, not prompts, responses, or session IDs.
 
 <a id="wsl-selection"></a>
 
@@ -253,7 +262,10 @@ dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --fi
 ```
 
 Full tests include real WSL integration tests and require a distribution named
-`Ubuntu` with Codex visible to `sh -lc`; USB hardware tests skip unless explicitly enabled:
+`Ubuntu` with Codex visible to `sh -lc`; USB hardware tests skip unless explicitly enabled.
+
+The real weekly-account test also skips unless `CODEXTRAY_TEST_WEEKLY_DISTRIBUTION`
+is set. Use the focused commands below to enable it deliberately.
 
 ```powershell
 dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore
@@ -280,7 +292,9 @@ set tray USB output to Off, and use your actual COM port:
 ```powershell
 $previousUsbPort = $env:CODEXTRAY_TEST_USB_PORT
 $previousUsbOrientation = $env:CODEXTRAY_TEST_USB_ORIENTATION
+$previousWeeklyDistribution = $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION
 try {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $null
     $env:CODEXTRAY_TEST_USB_PORT = 'COM3'
     $env:CODEXTRAY_TEST_USB_ORIENTATION = 'Portrait'
     dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --filter 'Category=UsbHardware'
@@ -288,11 +302,75 @@ try {
 finally {
     $env:CODEXTRAY_TEST_USB_PORT = $previousUsbPort
     $env:CODEXTRAY_TEST_USB_ORIENTATION = $previousUsbOrientation
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $previousWeeklyDistribution
 }
 ```
 
 Previews go to `artifacts/usb-screen-previews`. Serial writes do not prove the
 pixels displayed correctly: inspect the screen yourself, then restore Automatic/your port.
+
+### Weekly-limit tests
+
+The automated command above tests quota parsing, failure/recovery, cancellation,
+rendering and full/partial frame updates using synthetic data, without account
+requests or physical USB writes. Synthetic previews are saved under
+`tests/CodexTray.Tests/bin/Release/net10.0-windows/weekly-limit-previews`
+as `Weekly-Portrait.png`, `Weekly-Landscape.png` and their `Unavailable-` counterparts.
+
+The following integration test makes an **authenticated network request** through
+`codex app-server` in WSL. Use a distribution where Codex is already signed in and
+visible to `sh -lc`; replace `Ubuntu` with its actual name. No certificate, key,
+password or credential file is required by the indicator. This focused test does
+not start the tray or write to USB, and does not send a prompt.
+
+```powershell
+$previousWeeklyDistribution = $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION
+try {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = 'Ubuntu'
+    dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --filter 'FullyQualifiedName~WeeklyLimitIntegrationTests'
+    if ($LASTEXITCODE -ne 0) { throw 'Weekly-limit account test failed.' }
+}
+finally {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $previousWeeklyDistribution
+}
+```
+
+Success requires a valid, unexpired weekly quota. An unsupported account/API,
+missing quota or login failure fails this test even though the application correctly
+shows **—**. The test saves `live-limit.json` (percentage and reset time) and
+`Live-Portrait.png` in the same preview directory. These are personal account data:
+keep them local and do not attach them to public reports. Build/test output is ignored
+by Git; Codex app-server may still use its normal Codex diagnostics.
+
+To show the real weekly quota on a supported Revision A USB screen, close vendor
+apps and set **USB screen → Off** in the tray first. Use the actual COM port that
+Automatic detection selects; the test rejects other ports. This test both queries
+the account and writes one frame to the physical screen:
+
+```powershell
+$previousWeeklyDistribution = $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION
+$previousUsbPort = $env:CODEXTRAY_TEST_USB_PORT
+$previousUsbOrientation = $env:CODEXTRAY_TEST_USB_ORIENTATION
+try {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = 'Ubuntu'
+    $env:CODEXTRAY_TEST_USB_PORT = 'COM3'
+    $env:CODEXTRAY_TEST_USB_ORIENTATION = 'Portrait'
+    dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --filter 'FullyQualifiedName~WeeklyLimitHardwareTests'
+    if ($LASTEXITCODE -ne 0) { throw 'Weekly-limit USB test failed.' }
+}
+finally {
+    $env:CODEXTRAY_TEST_WEEKLY_DISTRIBUTION = $previousWeeklyDistribution
+    $env:CODEXTRAY_TEST_USB_PORT = $previousUsbPort
+    $env:CODEXTRAY_TEST_USB_ORIENTATION = $previousUsbOrientation
+}
+```
+
+The hardware test skips unless both distribution and port variables are set.
+For landscape, use `Landscape`; reversed orientations are `ReversePortrait` and
+`ReverseLandscape`. Inspect the actual percentage, text and bar on the screen:
+successful serial writes do not prove correct displayed pixels. Restore your previous
+tray USB setting manually afterward; the `finally` blocks restore environment
+variables only. Neither live test replaces lifecycle, reconnect or installer acceptance.
 
 Before accepting a release, manually test setup, hook Trust, session start → Ready,
 prompt → Busy, normal completion → Ready with one notification, Ctrl+C → Ready,
@@ -376,7 +454,11 @@ Prompts, responses, transcript paths, working directories and model metadata are
 
 Hooks fail open: invalid input, an offline tray or IPC timeout returns exit code 0 so
 the indicator does not block Codex. The pipe connect budget is 250 ms and I/O is bounded.
-The indicator makes no network requests and writes no per-event state files, logs or registry values.
+Weekly-quota reads use Codex app-server in the selected WSL distribution to request
+account limits from OpenAI over the network with that Codex account's existing authentication.
+The indicator keeps only the weekly percentage and reset time in memory; it does not
+read or copy credentials. Codex app-server may use its normal Codex diagnostics.
+The indicator writes no per-event state files, logs or registry values.
 The .NET single-file runtime may extract native libraries at startup; this is not a status log.
 
 Installation/configuration persist `~/.codex/hooks.json`, a one-time

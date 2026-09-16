@@ -11,7 +11,7 @@ internal static class UsbScreenRenderer
     internal static readonly Color Background = Color.FromArgb(0x0F, 0x17, 0x2A);
 
     public static Bitmap Render(TrayState state, ScreenOrientation orientation, long animationStep = 0,
-        long mascotFrame = 0, bool mascotEnabled = true)
+        long mascotFrame = 0, bool mascotEnabled = true, WeeklyLimit? weeklyLimit = null)
     {
         var options = new UsbScreenOptions(Orientation: orientation);
         int width = options.Width;
@@ -42,16 +42,17 @@ internal static class UsbScreenRenderer
         }
         graphics.DrawString(state.ToString(), stateFont, accent,
             new RectangleF(0, 166, contentWidth, 58), center);
-        string detail = state switch
-        {
-            TrayState.Ready => "Ready for next prompt",
-            TrayState.Busy => "Working on your prompt",
-            TrayState.Error => "Codex status error",
-            TrayState.Inactive => "No active session",
-            _ => throw new ArgumentOutOfRangeException(nameof(state)),
-        };
+        string detail = weeklyLimit is null ? "Weekly remaining: —" : $"Weekly remaining: {weeklyLimit.RemainingPercent}%";
         graphics.DrawString(detail, detailFont, white,
-            new RectangleF(0, 236, contentWidth, 30), center);
+            new RectangleF(0, 232, contentWidth, 30), center);
+        using var track = new SolidBrush(Color.FromArgb(0x33, 0x41, 0x55));
+        graphics.FillRectangle(track, 8, 263, contentWidth - 16, 7);
+        if (weeklyLimit is not null && weeklyLimit.RemainingPercent > 0)
+        {
+            using var fill = new SolidBrush(weeklyLimit.RemainingPercent <= 10 ? Color.OrangeRed :
+                weeklyLimit.RemainingPercent <= 25 ? Color.Gold : Color.FromArgb(0x22, 0xC5, 0x5E));
+            graphics.FillRectangle(fill, 8, 263, (contentWidth - 16) * weeklyLimit.RemainingPercent / 100f, 7);
+        }
         return bitmap;
     }
 

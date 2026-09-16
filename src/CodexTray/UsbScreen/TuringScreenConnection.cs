@@ -6,7 +6,7 @@ namespace CodexTray;
 internal interface IUsbScreenConnection : IDisposable
 {
     void Show(TrayState state, ScreenOrientation orientation, CancellationToken cancellationToken,
-        long animationStep = 0, long mascotFrame = 0, bool mascotEnabled = true);
+        long animationStep = 0, long mascotFrame = 0, bool mascotEnabled = true, WeeklyLimit? weeklyLimit = null);
     void CheckConnection();
     void TurnOff();
 }
@@ -23,9 +23,10 @@ internal sealed class TuringScreenConnection(IUsbScreenTransport transport) : IU
     private TrayState? _lastState;
     private long _lastAnimationStep;
     private bool _lastMascotEnabled;
+    private WeeklyLimit? _lastWeeklyLimit;
 
     public void Show(TrayState state, ScreenOrientation orientation, CancellationToken cancellationToken,
-        long animationStep = 0, long mascotFrame = 0, bool mascotEnabled = true)
+        long animationStep = 0, long mascotFrame = 0, bool mascotEnabled = true, WeeklyLimit? weeklyLimit = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var options = new UsbScreenOptions(Orientation: orientation);
@@ -45,19 +46,21 @@ internal sealed class TuringScreenConnection(IUsbScreenTransport transport) : IU
             _lastState = null;
         }
 
-        if (mascotEnabled && _lastMascotEnabled && _lastState == state && _lastAnimationStep == animationStep)
+        if (mascotEnabled && _lastMascotEnabled && _lastState == state && _lastAnimationStep == animationStep &&
+            _lastWeeklyLimit == weeklyLimit)
         {
             using var mascot = UsbMascotRenderer.Render(state, mascotFrame);
             SendBitmap(mascot, UsbScreenRenderer.MascotBounds(orientation, animationStep).Location, options.Width, cancellationToken);
         }
         else
         {
-            using var bitmap = UsbScreenRenderer.Render(state, orientation, animationStep, mascotFrame, mascotEnabled);
+            using var bitmap = UsbScreenRenderer.Render(state, orientation, animationStep, mascotFrame, mascotEnabled, weeklyLimit);
             SendBitmap(bitmap, Point.Empty, options.Width, cancellationToken);
         }
         _lastState = state;
         _lastAnimationStep = animationStep;
         _lastMascotEnabled = mascotEnabled;
+        _lastWeeklyLimit = weeklyLimit;
     }
 
     private void SendBitmap(Bitmap bitmap, Point origin, int screenWidth, CancellationToken cancellationToken)
