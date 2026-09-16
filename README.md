@@ -6,6 +6,22 @@ A small Windows tray app that shows the lifecycle state of Codex CLI running in 
 Optionally, it mirrors the indicator on a Turing 3.5-inch Revision A USB display.
 No prompt or response text is displayed or retained by the indicator.
 
+Windows notification area — Inactive (gray):
+
+![Codex Tray Indicator inactive in the Windows notification area](docs/images/windows-tray.png)
+
+Busy (yellow) while Codex is working:
+
+![Codex Tray Indicator busy in the Windows notification area](docs/images/windows-tray-busy.png)
+
+Ready (green) for the next prompt:
+
+![Codex Tray Indicator ready in the Windows notification area](docs/images/windows-tray-ready.png)
+
+Right-click menu with startup, notifications and USB screen settings:
+
+![Codex Tray Indicator settings and USB screen menu](docs/images/windows-tray-settings.png)
+
 The source is licensed under [MIT](LICENSE). See [release history](CHANGELOG.md).
 v1.3.0 is being prepared for the first public unsigned release; download links become
 available after the repository and release are published.

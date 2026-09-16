@@ -6,6 +6,22 @@
 За бажанням дублює індикатор на USB-екрані Turing 3,5 дюйма Revision A.
 Індикатор не показує й не зберігає текст prompts або responses.
 
+Область сповіщень Windows — Inactive (сірий):
+
+![Неактивний Codex Tray Indicator в області сповіщень Windows](docs/images/windows-tray.png)
+
+Busy (жовтий), поки Codex працює:
+
+![Codex Tray Indicator у стані Busy в області сповіщень Windows](docs/images/windows-tray-busy.png)
+
+Ready (зелений), готовий до наступного prompt:
+
+![Codex Tray Indicator у стані Ready в області сповіщень Windows](docs/images/windows-tray-ready.png)
+
+Меню правого кліку з автозапуском, сповіщеннями та налаштуваннями USB-екрана:
+
+![Меню налаштувань Codex Tray Indicator та USB-екрана](docs/images/windows-tray-settings.png)
+
 Код ліцензовано за [MIT](LICENSE). Дивіться [історію змін](CHANGELOG.md).
 v1.3.0 готується до першого публічного unsigned release; посилання на завантаження
 запрацюють після публікації репозиторію та релізу.
