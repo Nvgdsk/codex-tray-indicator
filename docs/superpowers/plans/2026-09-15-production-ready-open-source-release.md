@@ -358,7 +358,7 @@ helper paths during final verification before release publication.
 - Consumes: public support policy and NuGet/GitHub Actions dependency ecosystems.
 - Produces: structured issue intake, a security-report redirect, PR checklist, and weekly grouped dependency updates.
 
-- [ ] **Step 1: Add failing metadata-contract assertions**
+- [x] **Step 1: Add failing metadata-contract assertions**
 
   Require the five files; valid issue-form names/descriptions/body IDs; a bug form requesting Windows, WSL distro, Codex CLI, app version, reproduction, expected/actual behavior, and sanitized logs; disabled blank issues with security-reporting guidance in `SECURITY.md`; and weekly Dependabot entries for `nuget` and `github-actions` rooted at `/`.
 
@@ -366,15 +366,15 @@ helper paths during final verification before release publication.
 
   Expected: nonzero exit listing absent GitHub metadata.
 
-- [ ] **Step 2: Add issue forms and contribution template**
+- [x] **Step 2: Add issue forms and contribution template**
 
   Ensure issue forms warn users not to attach prompts, responses, transcripts, certificate material, or secrets. Keep `contact_links` empty until the exact GitHub owner is confirmed in Task 10. The PR template requires tests, documentation impact, privacy/security impact, and hardware-test declaration.
 
-- [ ] **Step 3: Add Dependabot configuration**
+- [x] **Step 3: Add Dependabot configuration**
 
   Configure weekly updates with a limit of five open PRs per ecosystem, conventional `deps` commit prefixes, and grouped minor/patch updates. Do not configure automatic merge.
 
-- [ ] **Step 4: Verify and commit metadata**
+- [x] **Step 4: Verify and commit metadata**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-repository-contract.ps1`
 
