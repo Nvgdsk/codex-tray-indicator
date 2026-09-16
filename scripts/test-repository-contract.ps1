@@ -42,6 +42,100 @@ try {
             -Message "Required repository file is missing: $requiredFile"
     }
 
+    $publicDocuments = @('README.md', 'README.uk.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md', 'CODE_OF_CONDUCT.md')
+    foreach ($document in $publicDocuments) {
+        Assert-RepositoryContract `
+            -Condition (Test-Path -LiteralPath $document -PathType Leaf) `
+            -Message "Required public document is missing: $document"
+    }
+
+    $readmeSections = @(
+        'supported-scope', 'installation', 'hook-trust', 'tray-states',
+        'notifications', 'startup', 'usb-screen', 'wsl-selection',
+        'checksums', 'unsigned-release', 'source-build', 'tests',
+        'reinstall', 'uninstall', 'troubleshooting', 'privacy', 'security'
+    )
+    foreach ($readme in @('README.md', 'README.uk.md')) {
+        if (-not (Test-Path -LiteralPath $readme -PathType Leaf)) {
+            continue
+        }
+        $readmeText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $readme), [Text.Encoding]::UTF8)
+        Assert-RepositoryContract `
+            -Condition ($readmeText -match '\A\[English\]\(README\.md\) \| \[[^\]]+\]\(README\.uk\.md\)') `
+            -Message "$readme must begin with reciprocal English/Ukrainian language links."
+        foreach ($section in $readmeSections) {
+            $sectionPattern = '(?m)^<a id="' + [regex]::Escape($section) + '"></a>\r?\n\r?\n## \S'
+            Assert-RepositoryContract `
+                -Condition ($readmeText -match $sectionPattern) `
+                -Message "$readme is missing a headed documentation section: $section"
+        }
+        foreach ($requiredContent in @(
+            '../../releases/latest', 'CodexTraySetup.exe', 'CodexTray.exe',
+            '/hooks', 'Trust', 'Ready', 'Busy', 'Error', 'Inactive',
+            'Start with Windows', 'Notifications', 'USB35INCHIPSV2',
+            'VID_1A86&PID_5722', 'Revision A', 'WslDistribution',
+            'SHA256SUMS.txt', 'Get-FileHash', 'Unknown Publisher',
+            '10.0.401', '7.1.0', '--locked-mode', '-AllowUnsigned',
+            '--query-state', '--hook-test', '--install', '--uninstall',
+            'CODEXTRAY_TEST_USB_PORT', 'SECURITY.md', 'LICENSE'
+        )) {
+            Assert-RepositoryContract `
+                -Condition ($readmeText.Contains($requiredContent)) `
+                -Message "$readme is missing required setup/usage content: $requiredContent"
+        }
+    }
+
+    if ((Test-Path -LiteralPath 'README.md' -PathType Leaf) -and
+        (Test-Path -LiteralPath 'README.uk.md' -PathType Leaf)) {
+        $englishReadme = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'README.md'))
+        $ukrainianReadme = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'README.uk.md'))
+        $codeBlockPattern = '(?s)```powershell\r?\n(.*?)```'
+        $englishCommands = @([regex]::Matches($englishReadme, $codeBlockPattern) | ForEach-Object {
+            $_.Groups[1].Value.Replace("`r`n", "`n").Trim()
+        })
+        $ukrainianCommands = @([regex]::Matches($ukrainianReadme, $codeBlockPattern) | ForEach-Object {
+            $_.Groups[1].Value.Replace("`r`n", "`n").Trim()
+        })
+        Assert-RepositoryContract `
+            -Condition (($englishCommands | ConvertTo-Json -Compress) -ceq ($ukrainianCommands | ConvertTo-Json -Compress)) `
+            -Message 'English and Ukrainian README command blocks must be identical.'
+        foreach ($readmeText in @($englishReadme, $ukrainianReadme)) {
+            foreach ($block in [regex]::Matches($readmeText, $codeBlockPattern)) {
+                $parseTokens = $null
+                $parseErrors = $null
+                $null = [Management.Automation.Language.Parser]::ParseInput(
+                    $block.Groups[1].Value, [ref]$parseTokens, [ref]$parseErrors)
+                Assert-RepositoryContract `
+                    -Condition ($parseErrors.Count -eq 0) `
+                    -Message 'A README PowerShell command block contains a syntax error.'
+            }
+        }
+    }
+
+    if (Test-Path -LiteralPath 'CHANGELOG.md' -PathType Leaf) {
+        $changelogText = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'CHANGELOG.md'))
+        foreach ($version in @('1.0.0', '1.1.0', '1.2.0', '1.3.0')) {
+            Assert-RepositoryContract `
+                -Condition ($changelogText.Contains("## [$version]")) `
+                -Message "CHANGELOG.md is missing release history for $version."
+        }
+    }
+    if (Test-Path -LiteralPath 'SECURITY.md' -PathType Leaf) {
+        $securityText = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'SECURITY.md'))
+        Assert-RepositoryContract `
+            -Condition ($securityText.Contains('1.3.x') -and $securityText.Contains('../../security/advisories/new')) `
+            -Message 'SECURITY.md must declare supported versions and a private advisory reporting route.'
+    }
+    if (Test-Path -LiteralPath 'CODE_OF_CONDUCT.md' -PathType Leaf) {
+        $conductText = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'CODE_OF_CONDUCT.md'))
+        Assert-RepositoryContract `
+            -Condition ($conductText.Contains('Contributor Covenant') -and $conductText.Contains('version 2.1')) `
+            -Message 'CODE_OF_CONDUCT.md must attribute Contributor Covenant version 2.1.'
+        Assert-RepositoryContract `
+            -Condition ($conductText.Contains('../../security/advisories/new')) `
+            -Message 'CODE_OF_CONDUCT.md must provide the approved private owner-contact route.'
+    }
+
     $trackedFiles = @(& git -c core.excludesFile=NUL ls-files)
     if ($LASTEXITCODE -ne 0) {
         throw "git ls-files failed with exit code $LASTEXITCODE."
