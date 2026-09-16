@@ -27,6 +27,7 @@ were not recorded, so no dates are invented here.
 
 ### Fixed
 
+- SessionEnd hooks omit unsupported background execution; reinstall migrates owned hooks without changing foreign handlers.
 - Named-pipe connections enforce their timeout directly, even when thread-pool load delays cancellation timers.
 
 ## [1.2.0]

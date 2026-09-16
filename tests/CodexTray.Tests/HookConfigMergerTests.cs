@@ -30,10 +30,44 @@ public sealed class HookConfigMergerTests
                 "\"/mnt/c/Program Files/CodexTray/CodexTray.exe\" --hook --integration-id codex-tray-indicator-v1",
                 handler["command"]!.GetValue<string>());
             Assert.Equal(1, handler["timeout"]!.GetValue<int>());
-            Assert.True(handler["async"]!.GetValue<bool>());
+            if (eventName == "SessionEnd")
+            {
+                Assert.False(handler.ContainsKey("async"));
+            }
+            else
+            {
+                Assert.True(handler["async"]!.GetValue<bool>());
+            }
         }
 
         Assert.EndsWith(Environment.NewLine, result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Install_ExistingAsyncSessionEnd_MigratesOwnedHandlerAndPreservesForeignHandler()
+    {
+        const string existing = """
+            { "hooks": { "SessionEnd": [{ "hooks": [
+              { "type": "command", "command": "echo foreign", "async": true, "timeout": 3 },
+              { "type": "command", "command": "old --integration-id codex-tray-indicator-v1", "async": true, "timeout": 1 }
+            ] }] } }
+            """;
+        JsonNode? foreignBefore = ParseObject(existing)["hooks"]!["SessionEnd"]![0]!["hooks"]![0];
+
+        string once = HookConfigMerger.Install(existing, "/new/path/CodexTray.exe");
+        string twice = HookConfigMerger.Install(once, "/new/path/CodexTray.exe");
+
+        JsonArray groups = Assert.IsType<JsonArray>(ParseObject(twice)["hooks"]!["SessionEnd"]);
+        Assert.Equal(2, groups.Count);
+        Assert.True(JsonNode.DeepEquals(foreignBefore, groups[0]!["hooks"]![0]));
+        JsonObject ownedHandler = Assert.IsType<JsonObject>(groups[1]!["hooks"]![0]);
+        Assert.False(ownedHandler.ContainsKey("async"));
+        Assert.Equal(1, ownedHandler["timeout"]!.GetValue<int>());
+        Assert.Equal(
+            "\"/new/path/CodexTray.exe\" --hook --integration-id codex-tray-indicator-v1",
+            ownedHandler["command"]!.GetValue<string>());
+        Assert.Equal(5, HookConfigMerger.CountOwnedHandlers(twice));
+        Assert.True(JsonNode.DeepEquals(ParseObject(once), ParseObject(twice)));
     }
 
     [Fact]

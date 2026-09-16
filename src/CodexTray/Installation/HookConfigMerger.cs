@@ -26,18 +26,21 @@ internal static class HookConfigMerger
         foreach (string eventName in EventNames)
         {
             JsonArray groups = GetOrCreateEventGroups(hooks, eventName);
+            var handler = new JsonObject
+            {
+                ["type"] = "command",
+                ["command"] = command,
+                ["timeout"] = 1,
+            };
+            // Codex always runs SessionEnd synchronously and warns if async is enabled.
+            if (eventName != "SessionEnd")
+            {
+                handler["async"] = true;
+            }
+
             groups.Add(new JsonObject
             {
-                ["hooks"] = new JsonArray
-                {
-                    new JsonObject
-                    {
-                        ["type"] = "command",
-                        ["command"] = command,
-                        ["timeout"] = 1,
-                        ["async"] = true,
-                    },
-                },
+                ["hooks"] = new JsonArray { handler },
             });
         }
 
