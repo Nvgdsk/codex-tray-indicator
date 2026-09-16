@@ -8,15 +8,11 @@ public sealed class SingleInstanceIntegrationTests
     [Trait("Category", "Integration")]
     public async Task SecondTrayProcess_ExitsQuicklyWithoutOwningThePipe()
     {
-        string executable = Path.Combine(
-            FindRepositoryRoot(),
-            "src",
-            "CodexTray",
-            "bin",
-            "Release",
-            "net8.0-windows",
-            "win-x64",
-            "CodexTray.exe");
+        string executable = Path.Combine(AppContext.BaseDirectory, "CodexTray.exe");
+        // Reject stale outputs before starting any process: the apphost must
+        // belong to the same build as the application assembly under test.
+        string currentBuildExecutable = Path.ChangeExtension(typeof(AppConstants).Assembly.Location, ".exe");
+        Assert.Equal(currentBuildExecutable, executable, ignoreCase: true);
         Assert.True(File.Exists(executable), $"Missing test executable: {executable}");
 
         Process? owner = null;
@@ -113,17 +109,5 @@ public sealed class SingleInstanceIntegrationTests
 
         return Process.Start(startInfo)
             ?? throw new InvalidOperationException($"Unable to start {executable}.");
-    }
-
-    private static string FindRepositoryRoot()
-    {
-        DirectoryInfo? directory = new(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "CodexTray.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName
-            ?? throw new DirectoryNotFoundException("Unable to locate the repository root.");
     }
 }
