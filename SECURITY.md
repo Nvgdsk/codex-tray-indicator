@@ -9,7 +9,8 @@
 
 ## Private reporting
 
-Use [Report a vulnerability](../../security/advisories/new) on GitHub.
+Use [Report a vulnerability](https://github.com/Nvgdsk/codex-tray-indicator/security/advisories/new)
+on GitHub.
 Do not disclose vulnerabilities in public Issues or pull requests.
 If private reporting is unavailable, use contact methods on the repository
 owner's GitHub profile, or ask for a private contact without incident details.

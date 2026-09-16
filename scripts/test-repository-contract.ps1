@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $failures = [Collections.Generic.List[string]]::new()
+$securityReportUrl = 'https://github.com/Nvgdsk/codex-tray-indicator/security/advisories/new'
 
 function Assert-RepositoryContract {
     param(
@@ -122,9 +123,11 @@ try {
     }
     if (Test-Path -LiteralPath 'SECURITY.md' -PathType Leaf) {
         $securityText = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'SECURITY.md'))
+        $securityReportLinks = [regex]::Matches($securityText, '\[Report a vulnerability\]\(([^)]+)\)')
         Assert-RepositoryContract `
-            -Condition ($securityText.Contains('1.3.x') -and $securityText.Contains('../../security/advisories/new')) `
-            -Message 'SECURITY.md must declare supported versions and a private advisory reporting route.'
+            -Condition ($securityText.Contains('1.3.x') -and $securityReportLinks.Count -eq 1 -and
+                $securityReportLinks[0].Groups[1].Value -ceq $securityReportUrl) `
+            -Message 'SECURITY.md must declare supported versions and link to the confirmed repository private advisory reporting route.'
     }
     if (Test-Path -LiteralPath 'CODE_OF_CONDUCT.md' -PathType Leaf) {
         $conductText = [IO.File]::ReadAllText((Join-Path $repositoryRoot 'CODE_OF_CONDUCT.md'))
@@ -201,9 +204,16 @@ try {
         Assert-RepositoryContract `
             -Condition ($issueConfigText -match '(?m)^blank_issues_enabled: false\s*$') `
             -Message 'Blank GitHub issues must be disabled.'
+        $contactNames = [regex]::Matches($issueConfigText, '(?m)^  - name: [^\r\n]+$')
+        $contactUrls = [regex]::Matches($issueConfigText, '(?m)^    url: ([^\r\n]+)$')
+        $contactDescriptions = [regex]::Matches($issueConfigText, '(?m)^    about: [^\r\n]+$')
         Assert-RepositoryContract `
-            -Condition ($issueConfigText -match '(?m)^contact_links: \[\]\s*$' -and $issueConfigText.Contains('SECURITY.md')) `
-            -Message 'Issue config must retain empty contacts until owner confirmation and reference SECURITY.md.'
+            -Condition ($issueConfigText -match '(?m)^contact_links:[ \t]*\r?\n' -and
+                $contactNames.Count -eq 1 -and $contactUrls.Count -eq 1 -and
+                $contactDescriptions.Count -eq 1 -and
+                $contactUrls[0].Groups[1].Value.Trim() -ceq $securityReportUrl -and
+                $issueConfigText.Contains('SECURITY.md')) `
+            -Message 'Issue config must provide one named private security contact for the confirmed repository, with a description and SECURITY.md guidance.'
     }
 
     $pullRequestTemplatePath = '.github/pull_request_template.md'
