@@ -1,0 +1,49 @@
+name: Feature request
+description: Explain a problem and propose an improvement.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please explain the user need before proposing an implementation.
+        For security vulnerabilities, follow SECURITY.md and report privately.
+        Do not attach prompts, responses, transcripts, certificate material,
+        secrets, credentials, or unsanitized screenshots.
+        Current scope is one selected WSL Codex CLI distribution and optional Revision A USB output.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing requests and read the supported scope in README.md.
+          required: true
+        - label: I removed private data and am not disclosing a security vulnerability publicly.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+      description: Describe what you cannot do today and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired outcome, settings and user-visible behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain workarounds or other approaches, if any.
+    validations:
+      required: false
+  - type: textarea
+    id: impact
+    attributes:
+      label: Compatibility, hardware and privacy considerations
+      description: Note required platforms/devices and any additional data collection or permissions.
+    validations:
+      required: false

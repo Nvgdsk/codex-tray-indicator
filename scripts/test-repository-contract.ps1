@@ -136,6 +136,121 @@ try {
             -Message 'CODE_OF_CONDUCT.md must provide the approved private owner-contact route.'
     }
 
+    $githubMetadataFiles = @(
+        '.github/ISSUE_TEMPLATE/bug_report.yml',
+        '.github/ISSUE_TEMPLATE/feature_request.yml',
+        '.github/ISSUE_TEMPLATE/config.yml',
+        '.github/pull_request_template.md',
+        '.github/dependabot.yml'
+    )
+    foreach ($metadataFile in $githubMetadataFiles) {
+        Assert-RepositoryContract `
+            -Condition (Test-Path -LiteralPath $metadataFile -PathType Leaf) `
+            -Message "Required GitHub metadata is missing: $metadataFile"
+    }
+
+    $requiredFormIds = [ordered]@{
+        '.github/ISSUE_TEMPLATE/bug_report.yml' = @(
+            'privacy', 'windows-version', 'wsl-distribution', 'codex-version',
+            'app-version', 'reproduction', 'expected-behavior', 'actual-behavior', 'diagnostics'
+        )
+        '.github/ISSUE_TEMPLATE/feature_request.yml' = @('privacy', 'problem', 'proposal', 'alternatives')
+    }
+    foreach ($formPath in $requiredFormIds.Keys) {
+        if (-not (Test-Path -LiteralPath $formPath -PathType Leaf)) {
+            continue
+        }
+        $formText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $formPath))
+        foreach ($header in @('name', 'description')) {
+            Assert-RepositoryContract `
+                -Condition ($formText -match ('(?m)^' + $header + ': [^\r\n]+$')) `
+                -Message "$formPath is missing a nonempty $header."
+        }
+        Assert-RepositoryContract `
+            -Condition ($formText -match '(?m)^body:\s*$') `
+            -Message "$formPath must define a body."
+        $idMatches = [regex]::Matches($formText, '(?m)^    id: ([a-zA-Z0-9_-]+)\s*$')
+        $formIds = @($idMatches | ForEach-Object { $_.Groups[1].Value })
+        Assert-RepositoryContract `
+            -Condition ($formIds.Count -gt 0 -and @($formIds | Select-Object -Unique).Count -eq $formIds.Count) `
+            -Message "$formPath must have valid, unique input IDs."
+        foreach ($requiredId in $requiredFormIds[$formPath]) {
+            Assert-RepositoryContract `
+                -Condition ($formIds -contains $requiredId) `
+                -Message "$formPath is missing required input: $requiredId"
+        }
+        foreach ($inputBlock in ([regex]::Split($formText, '(?m)^  - type: ') | Select-Object -Skip 1)) {
+            if ($inputBlock -match '\Amarkdown\s') {
+                continue
+            }
+            Assert-RepositoryContract `
+                -Condition ($inputBlock -match '(?m)^    id: [a-zA-Z0-9_-]+\s*$' -and
+                    $inputBlock -match '(?m)^      label: [^\r\n]+$') `
+                -Message "$formPath contains an input without a valid ID or label."
+        }
+        foreach ($privacyToken in @('prompts', 'responses', 'transcripts', 'certificate material', 'secrets', 'SECURITY.md')) {
+            Assert-RepositoryContract `
+                -Condition ($formText.Contains($privacyToken)) `
+                -Message "$formPath is missing privacy/security guidance: $privacyToken"
+        }
+    }
+
+    $issueConfigPath = '.github/ISSUE_TEMPLATE/config.yml'
+    if (Test-Path -LiteralPath $issueConfigPath -PathType Leaf) {
+        $issueConfigText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $issueConfigPath))
+        Assert-RepositoryContract `
+            -Condition ($issueConfigText -match '(?m)^blank_issues_enabled: false\s*$') `
+            -Message 'Blank GitHub issues must be disabled.'
+        Assert-RepositoryContract `
+            -Condition ($issueConfigText -match '(?m)^contact_links: \[\]\s*$' -and $issueConfigText.Contains('SECURITY.md')) `
+            -Message 'Issue config must retain empty contacts until owner confirmation and reference SECURITY.md.'
+    }
+
+    $pullRequestTemplatePath = '.github/pull_request_template.md'
+    if (Test-Path -LiteralPath $pullRequestTemplatePath -PathType Leaf) {
+        $pullRequestText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $pullRequestTemplatePath))
+        foreach ($checklistTopic in @('tests', 'documentation', 'privacy', 'security', 'hardware')) {
+            Assert-RepositoryContract `
+                -Condition ($pullRequestText -match ('(?im)^- \[ \] .*' + $checklistTopic)) `
+                -Message "PR template is missing a checklist item for $checklistTopic."
+        }
+    }
+
+    $dependabotPath = '.github/dependabot.yml'
+    if (Test-Path -LiteralPath $dependabotPath -PathType Leaf) {
+        $dependabotText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $dependabotPath))
+        Assert-RepositoryContract `
+            -Condition ($dependabotText -match '(?m)^version: 2\s*$') `
+            -Message 'Dependabot must use configuration version 2.'
+        $updateBlocks = [regex]::Matches($dependabotText,
+            '(?ms)^  - package-ecosystem: "?([a-z-]+)"?[ \t]*\r?\n(.*?)(?=^  - package-ecosystem:|\z)')
+        $ecosystems = @($updateBlocks | ForEach-Object { $_.Groups[1].Value })
+        Assert-RepositoryContract `
+            -Condition ($ecosystems.Count -eq 2 -and $ecosystems -contains 'nuget' -and $ecosystems -contains 'github-actions') `
+            -Message 'Dependabot must configure NuGet and GitHub Actions exactly once each.'
+        foreach ($updateBlock in $updateBlocks) {
+            $ecosystem = $updateBlock.Groups[1].Value
+            $configuration = $updateBlock.Groups[2].Value
+            foreach ($requiredSetting in @(
+                '(?m)^    directory: "/"\s*$',
+                '(?m)^      interval: weekly\s*$',
+                '(?m)^    open-pull-requests-limit: 5\s*$',
+                '(?m)^      prefix: deps\s*$',
+                '(?m)^    groups:\s*$',
+                '(?m)^        patterns: \["\*"\]\s*$',
+                '(?m)^          - minor\s*$',
+                '(?m)^          - patch\s*$'
+            )) {
+                Assert-RepositoryContract `
+                    -Condition ($configuration -match $requiredSetting) `
+                    -Message "Dependabot $ecosystem is missing a required root/weekly/limit/prefix/group setting: $requiredSetting"
+            }
+        }
+        Assert-RepositoryContract `
+            -Condition ($dependabotText -notmatch '(?i)(enable-auto-merge|gh\s+pr\s+merge|--auto)') `
+            -Message 'Dependabot configuration must not enable automatic merge.'
+    }
+
     $trackedFiles = @(& git -c core.excludesFile=NUL ls-files)
     if ($LASTEXITCODE -ne 0) {
         throw "git ls-files failed with exit code $LASTEXITCODE."
