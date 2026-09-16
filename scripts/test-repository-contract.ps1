@@ -251,6 +251,66 @@ try {
             -Message 'Dependabot configuration must not enable automatic merge.'
     }
 
+    $ciPath = '.github/workflows/ci.yml'
+    Assert-RepositoryContract `
+        -Condition (Test-Path -LiteralPath $ciPath -PathType Leaf) `
+        -Message 'Required CI workflow is missing: .github/workflows/ci.yml'
+    if (Test-Path -LiteralPath $ciPath -PathType Leaf) {
+        $ciText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $ciPath))
+        foreach ($requiredCiPattern in @(
+            '(?m)^  pull_request:\s*$',
+            '(?m)^  push:\s*$',
+            '(?m)^permissions:\r?\n  contents: read\s*$',
+            '(?m)^  cancel-in-progress: true\s*$',
+            '(?m)^    runs-on: windows-latest\s*$',
+            '(?m)^          persist-credentials: false\s*$',
+            '(?m)^          global-json-file: global.json\s*$',
+            '(?m)^          dotnet-version: 10\.0\.401\s*$',
+            '(?m)^          cache: true\s*$',
+            '(?m)^          cache-dependency-path: "\*\*/packages\.lock\.json"\s*$',
+            '(?m)^  CODEXTRAY_TEST_USB_PORT: ""\s*$',
+            '(?m)^  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"\s*$',
+            'dotnet restore .*--locked-mode',
+            'dotnet format .*--verify-no-changes --no-restore',
+            'dotnet build .*--configuration Release --no-restore',
+            'dotnet test .*--configuration Release --no-build --no-restore',
+            'Category!=Integration&Category!=UsbHardware',
+            '--results-directory TestResults',
+            '--report-xunit-trx --report-xunit-trx-filename ci\.trx',
+            'dotnet list .* package --vulnerable --include-transitive --format json --output-version 1 --no-restore',
+            'ConvertFrom-Json',
+            'Assert-SafeAuditReport',
+            '(?m)^        if: failure\(\)\s*$',
+            '(?m)^          path: TestResults/\*\*/\*\.trx\s*$',
+            '(?m)^          retention-days: 7\s*$'
+        )) {
+            Assert-RepositoryContract `
+                -Condition ($ciText -match $requiredCiPattern) `
+                -Message "CI workflow is missing a required quality/safety gate: $requiredCiPattern"
+        }
+        $ciActions = [regex]::Matches($ciText, '(?m)^\s*uses: ([^\s#]+)')
+        Assert-RepositoryContract `
+            -Condition ($ciActions.Count -eq 3) `
+            -Message 'CI must use the three declared checkout, setup-dotnet and upload-artifact actions.'
+        foreach ($ciAction in $ciActions) {
+            Assert-RepositoryContract `
+                -Condition ($ciAction.Groups[1].Value -match '^actions/(checkout|setup-dotnet|upload-artifact)@[0-9a-f]{40}(?:[0-9a-f]{24})?$') `
+                -Message "CI action must use an official immutable commit SHA: $($ciAction.Groups[1].Value)"
+        }
+        Assert-RepositoryContract `
+            -Condition ($ciText -notmatch '(?i)(pull_request_target|secrets\s*\.|contents: write|packages: write|id-token: write|--logger|test-usb-screen|gh\s+pr\s+merge)') `
+            -Message 'CI must not use privileged PR triggers, write permissions, secrets, VSTest-only logger or hardware/merge commands.'
+        $orderedCiGates = @('dotnet restore ', 'dotnet format ', 'dotnet build ', 'dotnet test ', 'dotnet list ')
+        $previousGatePosition = -1
+        foreach ($orderedCiGate in $orderedCiGates) {
+            $gatePosition = $ciText.IndexOf($orderedCiGate, [StringComparison]::Ordinal)
+            Assert-RepositoryContract `
+                -Condition ($gatePosition -gt $previousGatePosition) `
+                -Message "CI gates must execute in restore/format/build/test/audit order: $orderedCiGate"
+            $previousGatePosition = $gatePosition
+        }
+    }
+
     $trackedFiles = @(& git -c core.excludesFile=NUL ls-files)
     if ($LASTEXITCODE -ne 0) {
         throw "git ls-files failed with exit code $LASTEXITCODE."
