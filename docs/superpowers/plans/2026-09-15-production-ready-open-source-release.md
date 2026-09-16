@@ -303,7 +303,7 @@
 - Consumes: approved installation, trust, security, WSL-only, USB, unsigned-release, testing, and support behavior.
 - Produces: an English canonical README, complete Ukrainian translation, and public project governance documents.
 
-- [ ] **Step 1: Add failing documentation-contract assertions**
+- [x] **Step 1: Add failing documentation-contract assertions**
 
   Require all six public documents, reciprocal language links at the beginning of both READMEs, and headings/content for supported scope, installation, `/hooks` Trust, tray states, notifications, startup, USB configuration, multi-distro WSL selection, SHA-256 verification, Unknown Publisher, source build, tests, reinstall, uninstall, troubleshooting, privacy, and security.
 
@@ -311,29 +311,34 @@
 
   Expected: nonzero exit listing missing documents and sections.
 
-- [ ] **Step 2: Write the canonical English README**
+- [x] **Step 2: Write the canonical English README**
 
   Link installation to `../../releases/latest`, which resolves within the eventual GitHub repository without embedding an account name. Explain that the self-contained `.exe` needs no separate .NET runtime, the first release is unsigned, Windows may show Unknown Publisher, and users should compare both downloads to `SHA256SUMS.txt` with `Get-FileHash` rather than disable any security control.
 
-- [ ] **Step 3: Write the complete Ukrainian README**
+- [x] **Step 3: Write the complete Ukrainian README**
 
   Translate every user-facing setup, usage, build, test, troubleshooting, privacy, and security section; retain commands, filenames, and technical identifiers exactly.
 
-- [ ] **Step 4: Add release and community documents**
+- [x] **Step 4: Add release and community documents**
 
   Add Keep-a-Changelog-style entries for v1.0.0 through v1.3.0; contribution setup/style/test/PR rules; supported security versions and private GitHub Security Advisory reporting; and Contributor Covenant 2.1 with a project-owner enforcement contact expressed as a GitHub profile/security-advisory route, not a private email.
 
-- [ ] **Step 5: Make the documentation contract pass**
+- [x] **Step 5: Make the documentation contract pass**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-repository-contract.ps1`
 
   Expected: exit 0.
 
-- [ ] **Step 6: Commit public documentation**
+- [x] **Step 6: Commit public documentation**
 
   Run: `git add README.md README.uk.md CHANGELOG.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md scripts/test-repository-contract.ps1; git diff --cached --check; git commit -m "docs: add bilingual open-source project guides"`
 
   Expected: commit succeeds; no certificate/signing instructions or private contact data are present.
+
+**Execution note for Task 9:** `scripts/test-hook-install.ps1` and
+`scripts/test-usb-screen.ps1` still reference the old `.tools/dotnet` executable.
+The READMEs use direct pinned .NET 10 test commands instead. Revisit these legacy
+helper paths during final verification before release publication.
 
 ---
 
