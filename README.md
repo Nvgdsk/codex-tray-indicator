@@ -22,6 +22,19 @@ Right-click menu with startup, notifications and USB screen settings:
 
 ![Codex Tray Indicator settings and USB screen menu](docs/images/windows-tray-settings.png)
 
+### USB display preview
+
+The optional Turing 3.5-inch Revision A display shows the lifecycle state,
+an animated pixel robot, and the remaining weekly Codex quota.
+
+| Inactive | Ready |
+|---|---|
+| ![Presentation image of the USB display in Inactive state with 63 percent weekly quota remaining](docs/images/usb-display-inactive-presentation.png) | ![Presentation image of the USB display in Ready state with 63 percent weekly quota remaining](docs/images/usb-display-ready-presentation.png) |
+
+These are AI-retouched presentation images based on maintainer-provided photos,
+not unedited hardware screenshots. Hardware details may differ from the originals.
+The displayed **63%** is a captured example, not a live reading of your account.
+
 The source is licensed under [MIT](LICENSE). See [release history](CHANGELOG.md).
 v1.3.0 is being prepared for the first public unsigned release; download links become
 available after the repository and release are published.
