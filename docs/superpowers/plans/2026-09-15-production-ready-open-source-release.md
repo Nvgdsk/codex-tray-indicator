@@ -451,14 +451,31 @@ helper paths during final verification before release publication.
 
 - Create: `.github/workflows/release.yml`
 - Create: `.github/release-notes/v1.3.0.md`
+- Create: `scripts/test-release-workflow.ps1`
 - Modify: `scripts/test-repository-contract.ps1`
+- Modify after explicit approval: `scripts/build-release.ps1`, `README.md`, `README.uk.md`
+- Modify: `CONTRIBUTING.md` (release automation is no longer future work)
 
 **Interfaces:**
 
 - Consumes: semantic tag, project version, pinned action SHAs, exact toolchain, `scripts/build-release.ps1 -AllowUnsigned`.
 - Produces: an unpublished GitHub draft containing exactly the installer, portable executable, and checksum file.
 
-- [ ] **Step 1: Add failing release-workflow assertions**
+**Approved adjustment:** The owner approved an opt-in `-PureTestsOnly` release
+build parameter so hosted builds exclude real WSL integration and USB hardware
+tests. Default local builds retain the complete test suite. Both emitted command
+branches are tested at the native process boundary; public guides explain that
+this option cannot replace full local/manual release acceptance.
+
+**Approved installer adjustment:** The owner approved installing Inno Setup
+7.1.0 x64 from its official `jrsoftware/issrc` release in hosted automation,
+verifying SHA-256 `0362A383ED217D4C4239B5933866DD96D3EB2102737DA92F80F6057A4B40DF2F`
+before execution and verifying the installed compiler version afterwards.
+The hosted image does not document WinGet availability and includes an older
+Inno compiler. Local Winget bootstrap remains unchanged. This supersedes the
+hosted Winget instruction in Step 3 below.
+
+- [x] **Step 1: Add failing release-workflow assertions**
 
   Require only `v*.*.*` tag pushes; read-only top-level permissions; `contents: write` only on the release job; full-SHA actions; exact SDK/Inno versions; strict tag-to-project-version comparison; the full CI gate sequence; explicit `-AllowUnsigned`; exact three assets; `gh release create --draft --verify-tag`; and no signing secret/material reference.
 
@@ -466,15 +483,15 @@ helper paths during final verification before release publication.
 
   Expected: nonzero exit because release automation is absent.
 
-- [ ] **Step 2: Write v1.3.0 release notes**
+- [x] **Step 2: Write v1.3.0 release notes**
 
   Describe WSL status tracking, tray notifications, optional supported Turing 3.5-inch Revision A USB output, installer/portable choices, WSL-only scope, the Unknown Publisher warning, and checksum verification. Do not describe the unsigned binary as trusted merely because it is downloadable.
 
-- [ ] **Step 3: Implement the draft-only release workflow**
+- [x] **Step 3: Implement the draft-only release workflow**
 
   Create a `windows-latest` release job that checks out without persisted credentials; sets up the exact SDK; installs `JRSoftware.InnoSetup.7` version `7.1.0` through exact noninteractive `winget`; verifies the tag is exactly `v` plus the project version; repeats locked restore/format/build/test/vulnerability gates; runs `scripts/build-release.ps1 -AllowUnsigned`; independently validates the asset set and hashes; then creates a draft via GitHub CLI with only `dist/CodexTraySetup.exe`, `dist/CodexTray.exe`, and `dist/SHA256SUMS.txt`.
 
-- [ ] **Step 4: Verify least privilege and draft behavior**
+- [x] **Step 4: Verify least privilege and draft behavior**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-repository-contract.ps1`
 
@@ -482,11 +499,39 @@ helper paths during final verification before release publication.
 
   Expected: contract exits 0; inspection shows draft creation, scoped write permission, and no signing material/secret reference.
 
-- [ ] **Step 5: Commit release automation**
+- [x] **Step 5: Commit release automation**
 
   Run: `git add .github/workflows/release.yml .github/release-notes/v1.3.0.md scripts/test-repository-contract.ps1; git diff --cached --check; git commit -m "ci: create verified draft releases from tags"`
 
   Expected: commit succeeds; workflow cannot publish a release automatically.
+
+**Task 8 verification notes (implementation commit `7395835`):**
+
+- The contract first failed on absent release automation/notes, then passed.
+  Behavioral tests exercise workflow functions and native-command boundaries:
+  9 tag cases, 10 asset/manifest cases, 3 installer cases, and 6 draft CLI cases.
+  Default full tests and explicit pure-test argument selection are also checked
+  using the actual release-script parameter block.
+- Controlled tests caught PowerShell parsing unquoted JSON field names as an
+  array. The GitHub CLI inspection now quotes `'isDraft,tagName,assets'`.
+- Duplicate-key-aware independent YAML checks confirmed tag-only triggers,
+  scoped permissions/token, immutable official action SHAs, gate ordering,
+  failure-only TRX retention, and release-context README links. All PowerShell
+  run blocks parsed. Read-only inline review found no unresolved blocker;
+  the complete branch security review remains in Task 9.
+- The real official Inno download matched the pinned SHA-256 and had a valid
+  Authenticode signature. It was not executed/reinstalled locally; the existing
+  exact 7.1.0 compiler was used for the smoke build. The downloaded installer
+  remains ignored under `artifacts/workflow-download-check/`.
+- Fresh `CI=true` locked restore/audit, format, Release build (zero warnings),
+  178 pure tests, and TRX generation passed. Actual workflow SDK/tag/notes,
+  dependency audit, and independent dist checksum gates passed locally.
+- `build-release.ps1 -AllowUnsigned -PureTestsOnly` passed end-to-end with 178
+  tests, valid x64 GUI output, exactly three release assets, two `NotSigned`
+  executables, and independently verified checksums. Only generated ignored
+  `artifacts/publish` and `dist` outputs were replaced; no application install,
+  WSL/USB operation, hosted run, remote push, tag, draft creation, or publication
+  occurred. Full local/manual acceptance remains pending Tasks 9-10.
 
 ---
 
