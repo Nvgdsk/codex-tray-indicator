@@ -25,6 +25,10 @@ were not recorded, so no dates are invented here.
 - Unsigned binaries require explicit `-AllowUnsigned`.
 - Generated binaries and signing material are excluded from Git.
 
+### Fixed
+
+- Named-pipe connections enforce their timeout directly, even when thread-pool load delays cancellation timers.
+
 ## [1.2.0]
 
 ### Added

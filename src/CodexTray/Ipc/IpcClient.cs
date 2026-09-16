@@ -44,11 +44,9 @@ internal sealed class IpcClient : IIpcClient
 
         try
         {
-            using (var connectCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-            {
-                connectCancellation.CancelAfter(_connectTimeout);
-                await pipe.ConnectAsync(connectCancellation.Token).ConfigureAwait(false);
-            }
+            // Enforce the deadline in the pipe connection loop, not through a
+            // timer callback that can be delayed by thread-pool starvation.
+            await pipe.ConnectAsync(_connectTimeout, cancellationToken).ConfigureAwait(false);
 
             using var ioCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             ioCancellation.CancelAfter(_ioTimeout);
