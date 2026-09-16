@@ -550,7 +550,7 @@ hosted Winget instruction in Step 3 below.
 - Consumes: the complete local implementation from Tasks 1-8.
 - Produces: a clean evidence bundle for source quality, dependency safety, release shape, hashes, tracked-file hygiene, and final review.
 
-- [ ] **Step 1: Verify repository hygiene and absence of tracked secrets**
+- [x] **Step 1: Verify repository hygiene and absence of tracked secrets**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-repository-contract.ps1`
 
@@ -558,7 +558,7 @@ hosted Winget instruction in Step 3 below.
 
   Expected: contract exits 0; `rg` returns no tracked match.
 
-- [ ] **Step 2: Verify a locked clean dependency graph**
+- [x] **Step 2: Verify a locked clean dependency graph**
 
   Run: `dotnet restore .\CodexTray.sln --locked-mode`
 
@@ -566,7 +566,7 @@ hosted Winget instruction in Step 3 below.
 
   Expected: restore exits 0; audit reports no known vulnerable package.
 
-- [ ] **Step 3: Verify format, analyzers, build, and tests**
+- [x] **Step 3: Verify format, analyzers, build, and tests**
 
   Run: `dotnet format .\CodexTray.sln --verify-no-changes --no-restore`
 
@@ -576,13 +576,13 @@ hosted Winget instruction in Step 3 below.
 
   Expected: all commands exit 0, no warnings; 177 pass and 3 opt-in hardware tests skip unless legitimate migration-only test count changes are explicitly reviewed.
 
-- [ ] **Step 4: Build the final unsigned local release**
+- [x] **Step 4: Build the final unsigned local release**
 
   Run: `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -AllowUnsigned`
 
   Expected: exact three assets, valid x64 Windows GUI executable, unsigned status explicitly reported, hashes verified.
 
-- [ ] **Step 5: Independently verify release assets**
+- [x] **Step 5: Independently verify release assets**
 
   Run: `$expected = Get-Content .\dist\SHA256SUMS.txt; Get-FileHash .\dist\CodexTray.exe, .\dist\CodexTraySetup.exe -Algorithm SHA256 | Format-Table Hash, Path; $expected`
 
@@ -590,21 +590,97 @@ hosted Winget instruction in Step 3 below.
 
   Expected: calculated SHA-256 values exactly match both checksum lines; both signatures show the expected unsigned state.
 
-- [ ] **Step 6: Review the complete branch diff and history**
+- [x] **Step 6: Review the complete branch diff and history**
 
   Run: `git diff --check; git status --short; git log --oneline --decorate 534f403..HEAD; git diff --stat 534f403..HEAD`
 
   Expected: no uncommitted source changes, no whitespace errors, generated assets ignored, and a readable sequence of focused commits.
 
-- [ ] **Step 7: Run a final security diff review**
+- [x] **Step 7: Run a final security diff review**
 
   Review `534f403..HEAD` with the repository security policy, focusing on WSL arguments, named-pipe ACL/limits, hook merging/trust, installer behavior, registry scope, serial bounds/timeouts, workflow permissions, release inputs, and secret exposure.
 
   Expected: no unresolved high-confidence vulnerability; any valid finding returns to a focused fix/test/verification cycle before Task 10.
 
-- [ ] **Step 8: Record manual acceptance as pending**
+- [x] **Step 8: Record manual acceptance as pending**
 
   Report the ten manual checks from the spec as a checklist. Do not claim production release acceptance until Vasyl runs or observes them on the supported Windows/WSL/USB machine.
+
+**Task 9 verification record (2026-09-16):**
+
+- Automated local verification is complete; production release acceptance is
+  **not** complete. No hosted CI, remote creation, push, tag, draft creation or
+  publication occurred. Work stayed in the existing single branch/folder.
+- Approved helper corrections are committed as `1234ab9`. Both validation
+  helpers select pinned SDK 10.0.401 inside the repository and restore caller
+  state. Six controlled helper acceptance/rejection cases and 28 release
+  workflow boundary cases passed under Windows PowerShell 5.1 and PowerShell 7,
+  through `scripts/test-repository-contract.ps1`, without real GitHub/USB access.
+  Real WSL atomic configuration tests use isolated temporary directories, not
+  the user's hooks configuration; the earlier fixture-leak check found none.
+- Approved single-instance correction is committed as
+  `7436f55a6cbd0ddb38d1002f9d5657a5bc61628c`. The test launches the application
+  apphost beside its current test build, not retained .NET 8 outputs. A guard
+  independently compares it with the loaded application assembly's sibling
+  apphost. RED failed on the old path before starting any process; GREEN passed
+  the actual current-build process test. Old ignored build outputs were retained.
+- Fresh SDK check returned 10.0.401. Locked restore with
+  `-p:NuGetAudit=true -p:NuGetAuditMode=all`, format verification and Release
+  build passed with zero warnings/errors. The fresh direct/transitive audit
+  returned complete version-1 JSON for both projects from NuGet, without known
+  vulnerabilities, problems or errors.
+- The full Release test command passed **181**, skipped **3** opt-in USB tests,
+  and failed **0** (184 total). TRX counters independently matched these results
+  in ignored `TestResults/task9-final-full.trx`. The count increase from the
+  planned 177 is the four reviewed Task 4 `ReleaseContractTests`; the current
+  path fix added a guard to an existing test and did not increase the count.
+  The isolated suite also passed 178 tests; the targeted current-build process
+  test passed once in `TestResults/task9-current-exe.trx`.
+- Dedicated physical USB tests were not enabled. Automated verification does
+  not establish visual hardware acceptance.
+- `scripts/build-release.ps1 -AllowUnsigned` passed end-to-end with
+  `PureTestsOnly=False`, again passing 181 tests and skipping three. Inno Setup
+  7.1.0 compiled the installer; the application is a self-contained x64 Windows
+  GUI single executable. Exactly `CodexTray.exe`, `CodexTraySetup.exe` and
+  `SHA256SUMS.txt` were produced. Independent PE, asset-set, checksum and
+  Authenticode checks passed; both executables are `NotSigned`.
+- The verified local candidate was built from commit `7436f55a6cbd0ddb38d1002f9d5657a5bc61628c`.
+  These hashes describe this local build, not future hosted/downloaded assets:
+
+  ```text
+  CCEAF89A7EBC7DF89CA7AFC10C0D6F1E3AE611447A560E53DD2C252E1AC48191  CodexTray.exe
+  AC530CC4ECAC9D86F888C465E19DABDC77F72423F86683D0DBF51C765A1C8DFD  CodexTraySetup.exe
+  ```
+
+  Sizes: application 116,277,560 bytes; installer 35,458,527 bytes.
+- The formal security scan `5202b0cb-e830-4637-99b6-f40af483f65a` completed
+  against immutable range `534f4032cb00ebeaba0b15ed55ff21557d4b6967` through
+  `1234ab961c202cbe7fd6ce7b0aaeaa428612b41b`, accounting for all 56 changed
+  paths, with zero reportable findings. It explicitly recorded the stale
+  process-test gap; that gap is now corrected and freshly tested above.
+  The sealed scan was not rewritten to claim coverage of later commits.
+  Follow-up read-only inline review covered the complete test-only delta from
+  `1234ab9` to `7436f55` under `SECURITY.md`, with no unresolved blocker or
+  identified security finding; application behavior and workflows did not change.
+  This was sequential parent review, not an independent reviewer. Daybreak
+  access was not granted; no protected-result visibility is claimed.
+- Repository contracts and tracked-path checks found no tracked generated
+  output or certificate/private-key file. No private keys were accessed.
+  Whitespace checks passed; history is focused and generated assets/TRX remain
+  ignored. The final progress-record commit is documentation-only.
+
+**Manual acceptance checklist — all pending owner observation:**
+
+- [ ] Clean installer execution on a supported Windows machine.
+- [ ] One-time Codex `/hooks` review and Trust flow.
+- [ ] Inactive, Ready, Busy and post-completion Ready transitions.
+- [ ] Exactly one notification for a genuinely completed turn.
+- [ ] Windows restart and per-user autostart.
+- [ ] Reinstall without duplicate owned hooks or changes to foreign hooks.
+- [ ] Uninstall cleanup preserving foreign hooks and the original backup.
+- [ ] Supported Revision A USB rendering and reconnect behavior.
+- [ ] Independently verify downloaded-asset checksums.
+- [ ] Confirm expected unsigned/Unknown Publisher messaging.
 
 ---
 
