@@ -431,6 +431,23 @@ try {
         }
     }
 
+    foreach ($helperPath in @('scripts/test-hook-install.ps1', 'scripts/test-usb-screen.ps1')) {
+        $helperText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $helperPath))
+        Assert-RepositoryContract `
+            -Condition ($helperText -notmatch '\.tools\\dotnet\\dotnet\.exe' -and
+                $helperText -match 'Get-Command dotnet\.exe' -and
+                $helperText -match 'sdk\.version' -and
+                $helperText -match '--version' -and
+                $helperText -match '--configuration Release' -and
+                $helperText -match '--no-build') `
+            -Message "$helperPath must resolve and verify the installed pinned SDK and use the verified Release build."
+    }
+
+    & (Join-Path $PSScriptRoot 'test-validation-helpers.ps1')
+    Assert-RepositoryContract `
+        -Condition ($LASTEXITCODE -eq 0) `
+        -Message 'Validation helper behavioral tests failed.'
+
     $trackedFiles = @(& git -c core.excludesFile=NUL ls-files)
     if ($LASTEXITCODE -ne 0) {
         throw "git ls-files failed with exit code $LASTEXITCODE."
