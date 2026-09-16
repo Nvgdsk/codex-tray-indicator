@@ -311,6 +311,126 @@ try {
         }
     }
 
+    $releaseWorkflowPath = '.github/workflows/release.yml'
+    Assert-RepositoryContract `
+        -Condition (Test-Path -LiteralPath $releaseWorkflowPath -PathType Leaf) `
+        -Message 'Required draft-release workflow is missing: .github/workflows/release.yml'
+    Assert-RepositoryContract `
+        -Condition (Test-Path -LiteralPath '.github/release-notes/v1.3.0.md' -PathType Leaf) `
+        -Message 'Required v1.3.0 release notes are missing.'
+    if (Test-Path -LiteralPath $releaseWorkflowPath -PathType Leaf) {
+        $releaseText = [IO.File]::ReadAllText((Join-Path $repositoryRoot $releaseWorkflowPath))
+        foreach ($requiredReleasePattern in @(
+            '(?m)^  push:\r?\n    tags:\r?\n      - "v\*\.\*\.\*"\s*$',
+            '(?m)^permissions:\r?\n  contents: read\s*$',
+            '(?m)^    permissions:\r?\n      contents: write\s*$',
+            '(?m)^    runs-on: windows-latest\s*$',
+            '(?m)^          persist-credentials: false\s*$',
+            '(?m)^          dotnet-version: 10\.0\.401\s*$',
+            '(?m)^          global-json-file: global.json\s*$',
+            '(?m)^  CODEXTRAY_TEST_USB_PORT: ""\s*$',
+            'Assert-ReleaseTag',
+            'innosetup-7\.1\.0-x64\.exe',
+            '0362A383ED217D4C4239B5933866DD96D3EB2102737DA92F80F6057A4B40DF2F',
+            'Get-FileHash .* -Algorithm SHA256',
+            'dotnet restore .*--locked-mode',
+            'dotnet format .*--verify-no-changes --no-restore',
+            'dotnet build .*--configuration Release --no-restore',
+            'dotnet test .*--configuration Release --no-build --no-restore',
+            'Category!=Integration&Category!=UsbHardware',
+            '--report-xunit-trx --report-xunit-trx-filename release\.trx',
+            'dotnet list .* package --vulnerable --include-transitive --format json --output-version 1 --no-restore',
+            'Assert-SafeAuditReport',
+            'scripts/build-release\.ps1 -AllowUnsigned -PureTestsOnly',
+            'Assert-ReleaseAssets',
+            'gh release create .*--draft --verify-tag',
+            'gh release view .*--json ''isDraft,tagName,assets''',
+            '(?m)^          GH_TOKEN: \$\{\{ github\.token \}\}\s*$',
+            '(?m)^        if: failure\(\)\s*$',
+            '(?m)^          path: TestResults/\*\*/\*\.trx\s*$',
+            '(?m)^          retention-days: 7\s*$'
+        )) {
+            Assert-RepositoryContract `
+                -Condition ($releaseText -match $requiredReleasePattern) `
+                -Message "Release workflow is missing a required gate: $requiredReleasePattern"
+        }
+        $releaseActions = [regex]::Matches($releaseText, '(?m)^\s*uses: ([^\s#]+)')
+        Assert-RepositoryContract `
+            -Condition ($releaseActions.Count -eq 3) `
+            -Message 'Release workflow must use only its three declared official actions.'
+        foreach ($releaseAction in $releaseActions) {
+            Assert-RepositoryContract `
+                -Condition ($releaseAction.Groups[1].Value -match '^actions/(checkout|setup-dotnet|upload-artifact)@[0-9a-f]{40}(?:[0-9a-f]{24})?$') `
+                -Message 'Release actions must use official immutable commit SHAs.'
+        }
+        Assert-RepositoryContract `
+            -Condition ($releaseText -notmatch '(?i)(pull_request|workflow_dispatch|workflow_run|secrets\s*\.|\.p12|\.pfx|certificate|--logger|test-usb-screen|gh\s+release\s+(edit|upload|delete)|--clobber|--draft=false)') `
+            -Message 'Release workflow must remain tag-only, draft-only, and free of signing material and unsafe overwrite commands.'
+        $previousReleaseGatePosition = -1
+        foreach ($releaseGate in @('Assert-ReleaseTag -', 'dotnet restore ', 'dotnet format ', 'dotnet build ', 'dotnet test ', 'dotnet list ', 'scripts/build-release.ps1 -AllowUnsigned -PureTestsOnly', 'Assert-ReleaseAssets -', 'gh release create ')) {
+            $releaseGatePosition = $releaseText.IndexOf($releaseGate, [StringComparison]::Ordinal)
+            Assert-RepositoryContract `
+                -Condition ($releaseGatePosition -gt $previousReleaseGatePosition) `
+                -Message "Release gates must execute in validation/quality/build/assets/draft order: $releaseGate"
+            $previousReleaseGatePosition = $releaseGatePosition
+        }
+        & (Join-Path $PSScriptRoot 'test-release-workflow.ps1')
+        Assert-RepositoryContract `
+            -Condition ($LASTEXITCODE -eq 0) `
+            -Message 'Release workflow behavioral tests failed.'
+    }
+
+    $releaseBuildPath = Join-Path $repositoryRoot 'scripts/build-release.ps1'
+    $buildTokens = $null
+    $buildParseErrors = $null
+    $releaseBuildAst = [Management.Automation.Language.Parser]::ParseFile(
+        $releaseBuildPath, [ref]$buildTokens, [ref]$buildParseErrors)
+    $testArgumentAssignment = $releaseBuildAst.Find({
+        param($node)
+        $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+        $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+        $node.Left.VariablePath.UserPath -eq 'testArguments'
+    }, $true)
+    $testInvocation = $releaseBuildAst.Find({
+        param($node)
+        $node -is [Management.Automation.Language.CommandAst] -and
+        $node.GetCommandName() -eq 'Invoke-Checked' -and
+        $node.CommandElements[-1].Extent.Text -eq '$testArguments'
+    }, $true)
+    Assert-RepositoryContract `
+        -Condition ($buildParseErrors.Count -eq 0 -and $null -ne $testArgumentAssignment -and $null -ne $testInvocation) `
+        -Message 'Release build must expose test argument selection for full/default and opt-in pure tests.'
+    if ($null -ne $testArgumentAssignment -and $null -ne $testInvocation) {
+        $buildText = [IO.File]::ReadAllText($releaseBuildPath)
+        $testSelection = [scriptblock]::Create($releaseBuildAst.ParamBlock.Extent.Text +
+            [Environment]::NewLine + $buildText.Substring(
+            $testArgumentAssignment.Extent.StartOffset,
+            $testInvocation.Extent.EndOffset - $testArgumentAssignment.Extent.StartOffset))
+        foreach ($pureOnly in @($false, $true)) {
+            $actualArguments = & {
+                param($Selection, $PureOnly)
+                $solutionPath = 'CodexTray.sln'
+                $dotnetPath = 'controlled-dotnet-boundary'
+                function Invoke-Checked {
+                    param([string]$FilePath, [string[]]$Arguments)
+                    if ($FilePath -ne 'controlled-dotnet-boundary') {
+                        throw 'Unexpected executable in test selection.'
+                    }
+                    $Arguments -join '|'
+                }
+                if ($PureOnly) { & $Selection -PureTestsOnly }
+                else { & $Selection }
+            } $testSelection $pureOnly
+            $expectedArguments = 'test|CodexTray.sln|--configuration|Release|--no-build|--no-restore'
+            if ($pureOnly) {
+                $expectedArguments += '|--filter|Category!=Integration&Category!=UsbHardware'
+            }
+            Assert-RepositoryContract `
+                -Condition ($actualArguments -ceq $expectedArguments) `
+                -Message "Release build emitted incorrect test arguments for PureTestsOnly=$pureOnly."
+        }
+    }
+
     $trackedFiles = @(& git -c core.excludesFile=NUL ls-files)
     if ($LASTEXITCODE -ne 0) {
         throw "git ls-files failed with exit code $LASTEXITCODE."

@@ -233,7 +233,9 @@ not a signing operation. Without it, unsigned output is rejected.
 
 The release script replaces only repository-local `artifacts/publish` and `dist`,
 gracefully stopping a running previous `dist/CodexTray.exe` first. Full tests require
-the Ubuntu/Codex integration baseline below. Success produces exactly
+the Ubuntu/Codex integration baseline below. `-PureTestsOnly` explicitly excludes
+real WSL integration and USB hardware tests for hosted builds; it does not replace
+full local testing or manual release acceptance. Success produces exactly
 `CodexTray.exe`, `CodexTraySetup.exe`, and `SHA256SUMS.txt` in `dist`;
 none belong in Git. Tool/package pinning makes the build inputs repeatable,
 not a guarantee of identical installer bytes across machines.

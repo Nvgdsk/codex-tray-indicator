@@ -67,5 +67,5 @@ not replace manual acceptance for installer, Trust, notifications or USB behavio
 A maintainer approves version changes and publication.
 Build locally with `scripts/build-release.ps1 -AllowUnsigned` only when an unsigned
 release is intended. Verify both executables against `SHA256SUMS.txt`.
-Future release automation must remain draft-only until manual acceptance;
+Release automation must remain draft-only until manual acceptance;
 do not silently replace assets under a published version.

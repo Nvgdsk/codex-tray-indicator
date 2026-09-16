@@ -238,6 +238,8 @@ script передає Inno. Unsigned switch — явне підтверджен�
 Release script замінює лише локальні `artifacts/publish` та `dist`,
 спершу штатно зупиняючи попередній запущений `dist/CodexTray.exe`.
 Повні тести потребують Ubuntu/Codex-конфігурації, описаної нижче.
+`-PureTestsOnly` явно виключає тести з реальними WSL та USB для hosted-збірок;
+цей режим не замінює повні локальні тести й ручне приймання релізу.
 Успішна збірка створює рівно `CodexTray.exe`, `CodexTraySetup.exe`
 і `SHA256SUMS.txt` у `dist`; жоден із цих файлів не повинен бути в Git.
 Закріплення tools/packages робить вхідні дані збірки повторюваними,

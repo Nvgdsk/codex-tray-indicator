@@ -1,0 +1,259 @@
+name: Draft unsigned release
+
+"on":
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  GH_PROMPT_DISABLED: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+  CODEXTRAY_TEST_USB_PORT: ""
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  release:
+    name: Verified draft release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate tag and release notes
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Assert-ReleaseTag {
+            param([string]$Tag, [string]$RefType, [string]$ProjectVersion)
+            $versionPattern = '\A(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z'
+            if ($RefType -cne 'tag' -or $ProjectVersion -cnotmatch $versionPattern -or
+                $Tag -cnotmatch ('\Av' + $versionPattern.Substring(2))) {
+              throw 'Release requires a strict vMAJOR.MINOR.PATCH tag and project version.'
+            }
+            if ($Tag -cne ('v' + $ProjectVersion)) {
+              throw "Tag '$Tag' does not match project version '$ProjectVersion'."
+            }
+          }
+
+          [xml]$project = Get-Content -LiteralPath 'src/CodexTray/CodexTray.csproj' -Raw
+          $versionNodes = @($project.SelectNodes('//PropertyGroup/Version'))
+          if ($versionNodes.Count -ne 1) {
+            throw 'The application project must have exactly one Version element.'
+          }
+          $projectVersion = $versionNodes[0].InnerText.Trim()
+          Assert-ReleaseTag -Tag $env:GITHUB_REF_NAME -RefType $env:GITHUB_REF_TYPE -ProjectVersion $projectVersion
+          $notesPath = ".github/release-notes/$($env:GITHUB_REF_NAME).md"
+          if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) {
+            throw "Release notes are missing: $notesPath"
+          }
+
+      - name: Set up pinned SDK and NuGet cache
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.401
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Verify selected SDK
+        run: |
+          $expectedSdk = (Get-Content -LiteralPath global.json -Raw | ConvertFrom-Json).sdk.version
+          $selectedSdk = dotnet --version
+          if ($LASTEXITCODE -ne 0 -or $selectedSdk -ne $expectedSdk) {
+            throw "Selected SDK '$selectedSdk' does not match pinned SDK '$expectedSdk'."
+          }
+
+      - name: Restore locked packages
+        run: dotnet restore ./CodexTray.sln --locked-mode -p:NuGetAudit=true -p:NuGetAuditMode=all
+
+      - name: Verify repository contract
+        run: ./scripts/test-repository-contract.ps1
+
+      - name: Verify formatting
+        run: dotnet format ./CodexTray.sln --verify-no-changes --no-restore
+
+      - name: Build Release
+        run: dotnet build ./CodexTray.sln --configuration Release --no-restore
+
+      - name: Test without real WSL or USB hardware
+        run: dotnet test ./CodexTray.sln --configuration Release --no-build --no-restore --filter 'Category!=Integration&Category!=UsbHardware' --results-directory TestResults -- --report-xunit-trx --report-xunit-trx-filename release.trx
+
+      - name: Audit direct and transitive dependencies
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Assert-SafeAuditReport {
+            param([AllowNull()][object]$Value)
+
+            if ($null -eq $Value) {
+              return
+            }
+            if ($Value -is [Array]) {
+              foreach ($item in $Value) {
+                Assert-SafeAuditReport $item
+              }
+              return
+            }
+            if ($Value -is [pscustomobject]) {
+              foreach ($property in $Value.PSObject.Properties) {
+                $nonemptyValues = @($property.Value | Where-Object { $null -ne $_ })
+                if ($property.Name -eq 'vulnerabilities' -and $nonemptyValues.Count -gt 0) {
+                  throw 'Known dependency vulnerabilities found; review the audit report.'
+                }
+                if ($property.Name -in @('problems', 'errors') -and $nonemptyValues.Count -gt 0) {
+                  throw 'Dependency audit reported problems; do not treat an incomplete audit as clean.'
+                }
+                Assert-SafeAuditReport $property.Value
+              }
+            }
+          }
+
+          $auditOutput = dotnet list ./CodexTray.sln package --vulnerable --include-transitive --format json --output-version 1 --no-restore
+          if ($LASTEXITCODE -ne 0) {
+            throw "Dependency audit failed with exit code $LASTEXITCODE."
+          }
+          $auditJson = $auditOutput -join [Environment]::NewLine
+          Write-Output $auditJson
+          $report = $auditJson | ConvertFrom-Json
+          if ($report.version -ne 1 -or @($report.projects).Count -eq 0 -or @($report.sources).Count -eq 0) {
+            throw 'Dependency audit did not return a complete version-1 report.'
+          }
+          Assert-SafeAuditReport $report
+
+      - name: Install hash-pinned Inno Setup
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Install-VerifiedInnoSetup {
+            param([string]$InstallerPath, [string]$ExpectedHash)
+            $actualHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
+            if ($actualHash -cne $ExpectedHash) {
+              throw 'Inno Setup download SHA-256 mismatch; refusing to execute it.'
+            }
+            $process = Start-Process -FilePath $InstallerPath -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/SP-') -Wait -PassThru -WindowStyle Hidden
+            if ($process.ExitCode -ne 0) {
+              throw "Inno Setup installation failed with exit code $($process.ExitCode)."
+            }
+          }
+
+          # SHA-256 independently recorded in the Microsoft WinGet 7.1.0 x64 manifest.
+          $innoInstaller = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.0-x64.exe'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe' -OutFile $innoInstaller
+          Install-VerifiedInnoSetup -InstallerPath $innoInstaller -ExpectedHash '0362A383ED217D4C4239B5933866DD96D3EB2102737DA92F80F6057A4B40DF2F'
+          $compilerPath = Join-Path $env:LOCALAPPDATA 'Programs/Inno Setup 7/ISCC.exe'
+          if (-not (Test-Path -LiteralPath $compilerPath -PathType Leaf)) {
+            throw 'The pinned Inno Setup compiler was not installed.'
+          }
+          $compilerVersion = & $compilerPath --version
+          if ($LASTEXITCODE -ne 0 -or $compilerVersion -cne '7.1.0') {
+            throw 'Installed Inno Setup compiler does not match 7.1.0.'
+          }
+
+      - name: Build explicitly unsigned release
+        run: ./scripts/build-release.ps1 -AllowUnsigned -PureTestsOnly
+
+      - name: Verify exact release assets and checksums
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+
+          function Assert-ReleaseAssets {
+            param([string]$DistPath)
+            $expectedNames = @('CodexTray.exe', 'CodexTraySetup.exe', 'SHA256SUMS.txt') | Sort-Object
+            $entries = @(Get-ChildItem -LiteralPath $DistPath -Force)
+            $actualNames = @($entries | ForEach-Object Name | Sort-Object)
+            if ($entries.Count -ne 3 -or
+                @(Compare-Object -ReferenceObject $expectedNames -DifferenceObject $actualNames).Count -ne 0) {
+              throw 'Release output must contain exactly the two executables and SHA256SUMS.txt.'
+            }
+            foreach ($entry in $entries) {
+              if ($entry.PSIsContainer -or $entry.Length -eq 0 -or
+                  ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw 'Release assets must be nonempty regular files, not directories or links.'
+              }
+            }
+
+            $lines = @(Get-Content -LiteralPath (Join-Path $DistPath 'SHA256SUMS.txt'))
+            if ($lines.Count -ne 2) {
+              throw 'Checksum manifest must contain exactly two entries.'
+            }
+            $hashes = @{}
+            foreach ($line in $lines) {
+              if ($line -cnotmatch '\A([0-9A-F]{64})  (CodexTray(?:Setup)?\.exe)\z') {
+                throw 'Malformed checksum manifest entry.'
+              }
+              $fileName = $Matches[2]
+              if ($hashes.ContainsKey($fileName)) {
+                throw 'Duplicate checksum manifest entry.'
+              }
+              $hashes.Add($fileName, $Matches[1])
+            }
+            foreach ($fileName in @('CodexTray.exe', 'CodexTraySetup.exe')) {
+              if (-not $hashes.ContainsKey($fileName)) {
+                throw "Checksum manifest is missing $fileName."
+              }
+              $actualHash = (Get-FileHash -LiteralPath (Join-Path $DistPath $fileName) -Algorithm SHA256).Hash
+              if ($actualHash -cne $hashes[$fileName]) {
+                throw "Independent SHA-256 verification failed for $fileName."
+              }
+            }
+          }
+
+          Assert-ReleaseAssets -DistPath './dist'
+
+      - name: Create and inspect unpublished draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -cnotmatch '\Av(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\z') {
+            throw 'Refusing to create a release for an invalid tag.'
+          }
+          $notesPath = ".github/release-notes/$tag.md"
+          gh release create $tag --draft --verify-tag --repo $env:GITHUB_REPOSITORY --title "Codex Tray Indicator $tag" --notes-file $notesPath dist/CodexTraySetup.exe dist/CodexTray.exe dist/SHA256SUMS.txt
+          if ($LASTEXITCODE -ne 0) {
+            throw "Draft release creation failed with exit code $LASTEXITCODE; no overwrite or retry will be attempted."
+          }
+          $draftOutput = gh release view $tag --repo $env:GITHUB_REPOSITORY --json 'isDraft,tagName,assets'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Draft release inspection failed with exit code $LASTEXITCODE."
+          }
+          $draft = ($draftOutput -join [Environment]::NewLine) | ConvertFrom-Json
+          $expectedNames = @('CodexTray.exe', 'CodexTraySetup.exe', 'SHA256SUMS.txt') | Sort-Object
+          $actualNames = @($draft.assets | ForEach-Object name | Sort-Object)
+          if ($draft.isDraft -cne $true -or $draft.tagName -cne $tag -or $actualNames.Count -ne 3 -or
+              @(Compare-Object -ReferenceObject $expectedNames -DifferenceObject $actualNames).Count -ne 0) {
+            throw 'Release inspection did not confirm the expected unpublished draft and exact assets.'
+          }
+          Write-Output 'Verified draft only. Manual acceptance and explicit owner approval are required before publication.'
+
+      - name: Upload test reports only on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: failed-test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1,6 +1,9 @@
 [CmdletBinding()]
 param(
-    [switch]$AllowUnsigned
+    [switch]$AllowUnsigned,
+    # Hosted runners lack the maintainer's real Ubuntu/Codex and USB baseline.
+    # This is not a substitute for full local release acceptance.
+    [switch]$PureTestsOnly
 )
 
 Set-StrictMode -Version Latest
@@ -198,12 +201,16 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 Invoke-Checked $dotnetPath @('restore', $solutionPath, '--locked-mode')
 Invoke-Checked $dotnetPath @('restore', $projectPath, '--locked-mode', '--runtime', 'win-x64')
 Invoke-Checked $dotnetPath @('build', $solutionPath, '--configuration', 'Release', '--no-restore')
-Invoke-Checked $dotnetPath @(
+$testArguments = @(
     'test',
     $solutionPath,
     '--configuration', 'Release',
     '--no-build',
     '--no-restore')
+if ($PureTestsOnly) {
+    $testArguments += @('--filter', 'Category!=Integration&Category!=UsbHardware')
+}
+Invoke-Checked $dotnetPath $testArguments
 Invoke-Checked $dotnetPath @(
     'publish',
     $projectPath,
@@ -314,6 +321,7 @@ if ($assetDifferences.Count -gt 0) {
     Architecture = 'x64'
     Subsystem = 'Windows GUI'
     UnsignedReleaseExplicitlyAllowed = [bool]$AllowUnsigned
+    PureTestsOnly = [bool]$PureTestsOnly
     ApplicationBytes = (Get-Item -LiteralPath $applicationPath).Length
     InstallerBytes = (Get-Item -LiteralPath $setupPath).Length
 }
