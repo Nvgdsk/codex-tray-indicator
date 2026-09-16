@@ -690,6 +690,7 @@ hosted Winget instruction in Step 3 below.
 
 - Modify after owner confirmation: `SECURITY.md`
 - Modify after owner confirmation: `.github/ISSUE_TEMPLATE/config.yml`
+- Modify: `scripts/test-repository-contract.ps1` (confirmed security-route checks)
 - Optional local Git configuration: `origin`
 - External state: new public GitHub repository, branch settings, pushed branch/tag, draft release
 
@@ -698,11 +699,11 @@ hosted Winget instruction in Step 3 below.
 - Consumes: verified clean branch, confirmed GitHub owner, approved repository name `codex-tray-indicator`, and manual owner decisions.
 - Produces: public source repository and, only after later approvals, a draft then published v1.3.0 release.
 
-- [ ] **Step 1: Confirm owner, repository name, and public visibility**
+- [x] **Step 1: Confirm owner, repository name, and public visibility**
 
   Ask Vasyl to confirm the exact GitHub account/organization, `codex-tray-indicator`, and `public`. Do not infer the owner from local Git identity.
 
-- [ ] **Step 2: Replace repository URL templates and verify documentation links**
+- [x] **Step 2: Replace repository URL templates and verify documentation links**
 
   Add the confirmed repository's absolute private-advisory URL to `SECURITY.md` and `.github/ISSUE_TEMPLATE/config.yml`; keep the README release links relative.
 
@@ -714,11 +715,39 @@ hosted Winget instruction in Step 3 below.
 
   Expected: exit 0.
 
-- [ ] **Step 3: Commit final repository URLs**
+- [x] **Step 3: Commit final repository URLs**
 
-  Run: `git add SECURITY.md .github/ISSUE_TEMPLATE/config.yml; git diff --cached --check; git commit -m "docs: finalize GitHub security links"`
+  Run: `git add SECURITY.md .github/ISSUE_TEMPLATE/config.yml scripts/test-repository-contract.ps1; git diff --cached --check; git commit -m "docs: finalize GitHub security links"`
 
-  Expected: commit succeeds and working tree is clean.
+  Expected: commit succeeds; URL/contract changes are committed and unrelated
+  user-owned working-tree changes remain untouched.
+
+**Task 10 Steps 1-3 record (2026-09-16, commit `c6880dd`):**
+
+- The owner supplied a screenshot of the empty public repository
+  `Nvgdsk/codex-tray-indicator`, then approved the local URL update. This is
+  owner-supplied confirmation, not an authenticated remote/settings inspection.
+- `SECURITY.md` and the named GitHub Issues security contact now use
+  `https://github.com/Nvgdsk/codex-tray-indicator/security/advisories/new`.
+  The existing private-reporting fallback and privacy warnings were preserved.
+  README release links remain relative; no README edits were made in this step.
+- Updated contract checks first rejected the old relative route and empty
+  contacts, then passed in Windows PowerShell 5.1 and PowerShell 7. Nine
+  controlled cases executed the actual metadata gates: current routes accepted;
+  relative/wrong-owner/public-issue routes, empty/duplicate contacts, missing
+  description and enabled blank issues rejected. An independent,
+  duplicate-key-aware YAML parse verified the contact schema and URI. Placeholder
+  scanning and whitespace checks passed. Inline read-only review found no blocker.
+- The three-file commit contains only the two reporting files and their contract
+  checks. New user-owned weekly-limit/USB source, tests, README and changelog edits
+  were already present and were neither changed nor staged by this step.
+  The worktree is therefore intentionally not clean. Task 9 evidence applies to
+  its recorded build commit, not this new uncommitted feature work; any inclusion
+  of that work requires separate review/verification before a source push.
+- No remote was added, branch renamed, source pushed, tag created, draft created,
+  release published, or GitHub setting changed. Private vulnerability reporting
+  still requires owner-approved activation/inspection in Step 4; adding a URL
+  does not enable the feature or prove that its live endpoint is available.
 
 - [ ] **Step 4: Obtain separate approval to create/configure the remote repository**
 
